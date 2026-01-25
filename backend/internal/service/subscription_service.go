@@ -480,23 +480,24 @@ func (s *SubscriptionService) CheckAndActivateWindow(ctx context.Context, sub *U
 		return nil
 	}
 
-	// 使用当天零点作为窗口起始时间
-	windowStart := startOfDay(time.Now())
+	// 使用当前时间作为窗口起始时间（支持5小时等短周期窗口）
+	windowStart := time.Now()
 	return s.userSubRepo.ActivateWindows(ctx, sub.ID, windowStart)
 }
 
 // CheckAndResetWindows 检查并重置过期的窗口
 func (s *SubscriptionService) CheckAndResetWindows(ctx context.Context, sub *UserSubscription) error {
-	// 使用当天零点作为新窗口起始时间
+	// 使用当天零点作为周/月窗口起始时间
 	windowStart := startOfDay(time.Now())
 	needsInvalidateCache := false
 
-	// 日窗口重置（24小时）
+	// 日窗口重置（5小时）- 使用当前时间作为新窗口起始
 	if sub.NeedsDailyReset() {
-		if err := s.userSubRepo.ResetDailyUsage(ctx, sub.ID, windowStart); err != nil {
+		dailyWindowStart := time.Now()
+		if err := s.userSubRepo.ResetDailyUsage(ctx, sub.ID, dailyWindowStart); err != nil {
 			return err
 		}
-		sub.DailyWindowStart = &windowStart
+		sub.DailyWindowStart = &dailyWindowStart
 		sub.DailyUsageUSD = 0
 		needsInvalidateCache = true
 	}

@@ -241,6 +241,12 @@ func (s *SettingService) UpdateSettings(ctx context.Context, settings *SystemSet
 		updates[SettingKeyOpsMetricsIntervalSeconds] = strconv.Itoa(settings.OpsMetricsIntervalSeconds)
 	}
 
+	// Payment settings (套餐支付配置)
+	updates[SettingKeyPaymentAlipayQrcode] = settings.PaymentAlipayQrcode
+	updates[SettingKeyPaymentWechatQrcode] = settings.PaymentWechatQrcode
+	updates[SettingKeyPaymentServiceQrcode] = settings.PaymentServiceQrcode
+	updates[SettingKeyPaymentNote] = settings.PaymentNote
+
 	err := s.settingRepo.SetMultiple(ctx, updates)
 	if err == nil && s.onUpdate != nil {
 		s.onUpdate() // Invalidate cache after settings update
@@ -496,6 +502,12 @@ func (s *SettingService) parseSettings(settings map[string]string) *SystemSettin
 			result.OpsMetricsIntervalSeconds = v
 		}
 	}
+
+	// Payment settings (套餐支付配置)
+	result.PaymentAlipayQrcode = settings[SettingKeyPaymentAlipayQrcode]
+	result.PaymentWechatQrcode = settings[SettingKeyPaymentWechatQrcode]
+	result.PaymentServiceQrcode = settings[SettingKeyPaymentServiceQrcode]
+	result.PaymentNote = settings[SettingKeyPaymentNote]
 
 	return result
 }

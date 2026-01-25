@@ -63,6 +63,12 @@ export interface SystemSettings {
   ops_realtime_monitoring_enabled: boolean
   ops_query_mode_default: 'auto' | 'raw' | 'preagg' | string
   ops_metrics_interval_seconds: number
+
+  // Payment settings
+  payment_alipay_qrcode: string
+  payment_wechat_qrcode: string
+  payment_service_qrcode: string
+  payment_note: string
 }
 
 export interface UpdateSettingsRequest {
@@ -106,6 +112,11 @@ export interface UpdateSettingsRequest {
   ops_realtime_monitoring_enabled?: boolean
   ops_query_mode_default?: 'auto' | 'raw' | 'preagg' | string
   ops_metrics_interval_seconds?: number
+  // Payment settings
+  payment_alipay_qrcode?: string
+  payment_wechat_qrcode?: string
+  payment_service_qrcode?: string
+  payment_note?: string
 }
 
 /**

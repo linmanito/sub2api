@@ -262,6 +262,120 @@ var (
 			},
 		},
 	}
+	// OrdersColumns holds the columns for the "orders" table.
+	OrdersColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "deleted_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "status", Type: field.TypeString, Size: 20, Default: "pending"},
+		{Name: "amount", Type: field.TypeInt, Default: 0},
+		{Name: "notes", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "confirmed_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "ordered_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "plan_id", Type: field.TypeInt64},
+		{Name: "user_id", Type: field.TypeInt64},
+		{Name: "confirmed_by", Type: field.TypeInt64, Nullable: true},
+	}
+	// OrdersTable holds the schema information for the "orders" table.
+	OrdersTable = &schema.Table{
+		Name:       "orders",
+		Columns:    OrdersColumns,
+		PrimaryKey: []*schema.Column{OrdersColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "orders_plans_orders",
+				Columns:    []*schema.Column{OrdersColumns[9]},
+				RefColumns: []*schema.Column{PlansColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+			{
+				Symbol:     "orders_users_orders",
+				Columns:    []*schema.Column{OrdersColumns[10]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+			{
+				Symbol:     "orders_users_confirmed_orders",
+				Columns:    []*schema.Column{OrdersColumns[11]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "order_user_id",
+				Unique:  false,
+				Columns: []*schema.Column{OrdersColumns[10]},
+			},
+			{
+				Name:    "order_plan_id",
+				Unique:  false,
+				Columns: []*schema.Column{OrdersColumns[9]},
+			},
+			{
+				Name:    "order_status",
+				Unique:  false,
+				Columns: []*schema.Column{OrdersColumns[4]},
+			},
+			{
+				Name:    "order_ordered_at",
+				Unique:  false,
+				Columns: []*schema.Column{OrdersColumns[8]},
+			},
+			{
+				Name:    "order_confirmed_by",
+				Unique:  false,
+				Columns: []*schema.Column{OrdersColumns[11]},
+			},
+			{
+				Name:    "order_deleted_at",
+				Unique:  false,
+				Columns: []*schema.Column{OrdersColumns[3]},
+			},
+		},
+	}
+	// PlansColumns holds the columns for the "plans" table.
+	PlansColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt64, Increment: true},
+		{Name: "created_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "updated_at", Type: field.TypeTime, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "deleted_at", Type: field.TypeTime, Nullable: true, SchemaType: map[string]string{"postgres": "timestamptz"}},
+		{Name: "name", Type: field.TypeString, Size: 100},
+		{Name: "description", Type: field.TypeString, Nullable: true, SchemaType: map[string]string{"postgres": "text"}},
+		{Name: "price", Type: field.TypeInt, Default: 0},
+		{Name: "currency", Type: field.TypeString, Size: 10, Default: "CNY"},
+		{Name: "validity_days", Type: field.TypeInt, Default: 30},
+		{Name: "concurrency", Type: field.TypeInt, Default: 1},
+		{Name: "features", Type: field.TypeJSON, Nullable: true, SchemaType: map[string]string{"postgres": "jsonb"}},
+		{Name: "icon", Type: field.TypeString, Size: 50, Default: "standard"},
+		{Name: "is_recommended", Type: field.TypeBool, Default: false},
+		{Name: "status", Type: field.TypeString, Size: 20, Default: "active"},
+		{Name: "sort_order", Type: field.TypeInt, Default: 0},
+	}
+	// PlansTable holds the schema information for the "plans" table.
+	PlansTable = &schema.Table{
+		Name:       "plans",
+		Columns:    PlansColumns,
+		PrimaryKey: []*schema.Column{PlansColumns[0]},
+		Indexes: []*schema.Index{
+			{
+				Name:    "plan_status",
+				Unique:  false,
+				Columns: []*schema.Column{PlansColumns[13]},
+			},
+			{
+				Name:    "plan_sort_order",
+				Unique:  false,
+				Columns: []*schema.Column{PlansColumns[14]},
+			},
+			{
+				Name:    "plan_deleted_at",
+				Unique:  false,
+				Columns: []*schema.Column{PlansColumns[3]},
+			},
+		},
+	}
 	// PromoCodesColumns holds the columns for the "promo_codes" table.
 	PromoCodesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt64, Increment: true},
@@ -835,12 +949,39 @@ var (
 			},
 		},
 	}
+	// PlanGroupsColumns holds the columns for the "plan_groups" table.
+	PlanGroupsColumns = []*schema.Column{
+		{Name: "plan_id", Type: field.TypeInt},
+		{Name: "group_id", Type: field.TypeInt},
+	}
+	// PlanGroupsTable holds the schema information for the "plan_groups" table.
+	PlanGroupsTable = &schema.Table{
+		Name:       "plan_groups",
+		Columns:    PlanGroupsColumns,
+		PrimaryKey: []*schema.Column{PlanGroupsColumns[0], PlanGroupsColumns[1]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "plan_groups_plan_id",
+				Columns:    []*schema.Column{PlanGroupsColumns[0]},
+				RefColumns: []*schema.Column{PlansColumns[0]},
+				OnDelete:   schema.Cascade,
+			},
+			{
+				Symbol:     "plan_groups_group_id",
+				Columns:    []*schema.Column{PlanGroupsColumns[1]},
+				RefColumns: []*schema.Column{GroupsColumns[0]},
+				OnDelete:   schema.Cascade,
+			},
+		},
+	}
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
 		APIKeysTable,
 		AccountsTable,
 		AccountGroupsTable,
 		GroupsTable,
+		OrdersTable,
+		PlansTable,
 		PromoCodesTable,
 		PromoCodeUsagesTable,
 		ProxiesTable,
@@ -853,6 +994,7 @@ var (
 		UserAttributeDefinitionsTable,
 		UserAttributeValuesTable,
 		UserSubscriptionsTable,
+		PlanGroupsTable,
 	}
 )
 
@@ -873,6 +1015,15 @@ func init() {
 	}
 	GroupsTable.Annotation = &entsql.Annotation{
 		Table: "groups",
+	}
+	OrdersTable.ForeignKeys[0].RefTable = PlansTable
+	OrdersTable.ForeignKeys[1].RefTable = UsersTable
+	OrdersTable.ForeignKeys[2].RefTable = UsersTable
+	OrdersTable.Annotation = &entsql.Annotation{
+		Table: "orders",
+	}
+	PlansTable.Annotation = &entsql.Annotation{
+		Table: "plans",
 	}
 	PromoCodesTable.Annotation = &entsql.Annotation{
 		Table: "promo_codes",
@@ -926,4 +1077,6 @@ func init() {
 	UserSubscriptionsTable.Annotation = &entsql.Annotation{
 		Table: "user_subscriptions",
 	}
+	PlanGroupsTable.ForeignKeys[0].RefTable = PlansTable
+	PlanGroupsTable.ForeignKeys[1].RefTable = GroupsTable
 }

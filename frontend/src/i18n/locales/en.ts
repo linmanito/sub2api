@@ -206,7 +206,10 @@ export default {
     logout: 'Logout',
     github: 'GitHub',
     mySubscriptions: 'My Subscriptions',
-    docs: 'Docs'
+    docs: 'Docs',
+    plans: 'Plans',
+    planManagement: 'Plans',
+    orderManagement: 'Orders'
   },
 
   // Auth
@@ -950,7 +953,7 @@ export default {
       createFirstGroup: 'Create your first group to organize API keys.',
       creating: 'Creating...',
       updating: 'Updating...',
-      limitDay: 'd',
+      limitDay: '5h',
       limitWeek: 'w',
       limitMonth: 'mo',
       groupCreated: 'Group created successfully',
@@ -980,7 +983,7 @@ export default {
         typeNotEditable: 'Billing type cannot be changed after group creation.',
         standard: 'Standard (Balance)',
         subscription: 'Subscription (Quota)',
-        dailyLimit: 'Daily Limit (USD)',
+        dailyLimit: '5-Hour Limit (USD)',
         weeklyLimit: 'Weekly Limit (USD)',
         monthlyLimit: 'Monthly Limit (USD)',
         defaultValidityDays: 'Default Validity (Days)',
@@ -1031,7 +1034,7 @@ export default {
       revokeSubscription: 'Revoke Subscription',
       allStatus: 'All Status',
       allGroups: 'All Groups',
-      daily: 'Daily',
+      daily: '5-Hour',
       weekly: 'Weekly',
       monthly: 'Monthly',
       noLimits: 'No limits configured',
@@ -2986,6 +2989,20 @@ export default {
         saved: 'Stream timeout settings saved',
         saveFailed: 'Failed to save stream timeout settings'
       },
+      payment: {
+        title: 'Payment Settings',
+        description: 'Configure payment QR codes and instructions for plan subscriptions',
+        alipayQrcode: 'Alipay QR Code',
+        wechatQrcode: 'WeChat QR Code',
+        serviceQrcode: 'Service QR Code',
+        paymentNote: 'Payment Notes',
+        paymentNotePlaceholder: 'After payment, please note your username. Admin will confirm your order within 1-24 hours',
+        paymentNoteHint: 'This note will be displayed on the user payment page',
+        upload: 'Upload',
+        qrcodeSizeError: 'QR code image cannot exceed 500KB, current {size}KB',
+        qrcodeTypeError: 'Please upload an image format QR code',
+        qrcodeReadError: 'Failed to read image'
+      },
       saveSettings: 'Save Settings',
       saving: 'Saving...',
       settingsSaved: 'Settings saved successfully',
@@ -2995,6 +3012,119 @@ export default {
       failedToSave: 'Failed to save settings',
       failedToTestSmtp: 'SMTP connection test failed',
       failedToSendTestEmail: 'Failed to send test email'
+    },
+
+    // Plans Management
+    plans: {
+      title: 'Plan Management',
+      description: 'Manage purchasable plans for users',
+      searchPlans: 'Search plans...',
+      allStatus: 'All Status',
+      createPlan: 'Create Plan',
+      editPlan: 'Edit Plan',
+      deletePlan: 'Delete Plan',
+      recommended: 'Recommended',
+      days: 'days',
+      noGroups: 'No groups assigned',
+      noPlansYet: 'No Plans Yet',
+      createFirstPlan: 'Click the button above to create your first plan',
+      columns: {
+        name: 'Plan Name',
+        price: 'Price/Validity',
+        concurrency: 'Concurrency',
+        groups: 'Assigned Groups',
+        status: 'Status',
+        sortOrder: 'Sort Order',
+        actions: 'Actions'
+      },
+      status: {
+        active: 'Active',
+        disabled: 'Disabled'
+      },
+      form: {
+        name: 'Plan Name',
+        icon: 'Icon',
+        description: 'Description',
+        price: 'Price (USD)',
+        validityDays: 'Validity Days',
+        concurrency: 'Concurrency',
+        features: 'Features',
+        groups: 'Assigned Groups',
+        sortOrder: 'Sort Order',
+        isRecommended: 'Recommended Badge'
+      },
+      enterPlanName: 'Enter plan name',
+      optionalDescription: 'Optional description',
+      priceHint: 'Enter price in USD',
+      featurePlaceholder: 'Enter feature description',
+      addFeature: 'Add Feature',
+      selectGroups: 'Select groups to assign',
+      groupsHint: 'Users will get access to selected groups after subscribing',
+      creating: 'Creating...',
+      updating: 'Updating...',
+      createSuccess: 'Plan created successfully',
+      createFailed: 'Failed to create plan',
+      updateSuccess: 'Plan updated successfully',
+      updateFailed: 'Failed to update plan',
+      deleteSuccess: 'Plan deleted successfully',
+      deleteFailed: 'Failed to delete plan',
+      deleteConfirmMessage: 'Are you sure you want to delete plan "{name}"? This action cannot be undone.',
+      enableSuccess: 'Plan enabled',
+      disableSuccess: 'Plan disabled',
+      statusUpdateFailed: 'Failed to update status',
+      failedToLoad: 'Failed to load plans'
+    },
+
+    // Orders Management
+    orders: {
+      title: 'Order Management',
+      description: 'Manage user plan orders',
+      allStatus: 'All Status',
+      days: 'days',
+      noOrdersYet: 'No Orders Yet',
+      noOrdersDesc: 'User orders will appear here',
+      columns: {
+        id: 'Order ID',
+        user: 'User',
+        plan: 'Plan',
+        amount: 'Amount',
+        status: 'Status',
+        orderedAt: 'Ordered At',
+        confirmedAt: 'Processed At',
+        actions: 'Actions'
+      },
+      status: {
+        pending: 'Pending',
+        confirmed: 'Confirmed',
+        rejected: 'Rejected',
+        cancelled: 'Cancelled'
+      },
+      confirm: 'Confirm',
+      reject: 'Reject',
+      confirmOrder: 'Confirm Order',
+      rejectOrder: 'Reject Order',
+      orderDetails: 'Order Details',
+      notes: 'Notes',
+      optionalNotes: 'Optional notes',
+      rejectReason: 'Reject Reason',
+      rejectReasonPlaceholder: 'Enter reject reason (optional)',
+      confirmHint: 'After confirming the order, the system will create a subscription for the user and increase the concurrency accordingly.',
+      rejectHint: 'After rejecting, the user will need to submit a new order.',
+      confirmAction: 'Confirm Order',
+      rejectAction: 'Reject Order',
+      orderId: 'Order ID',
+      user: 'User',
+      plan: 'Plan',
+      amount: 'Amount',
+      orderedAt: 'Ordered At',
+      confirmedAt: 'Processed At',
+      confirmedBy: 'Processed By',
+      by: 'by',
+      confirmSuccess: 'Order confirmed',
+      confirmFailed: 'Failed to confirm order',
+      rejectSuccess: 'Order rejected',
+      rejectFailed: 'Failed to reject order',
+      failedToLoad: 'Failed to load orders'
     }
   },
 
@@ -3210,5 +3340,69 @@ export default {
         description: '<div style="line-height: 1.7;"><p style="margin-bottom: 12px;">Click to confirm and create your API key.</p><div style="padding: 8px 12px; background: #fee2e2; border-left: 3px solid #ef4444; border-radius: 4px; font-size: 13px; margin-bottom: 12px;"><b>⚠️ Important:</b><ul style="margin: 8px 0 0 16px;"><li>Copy the key (sk-xxx) immediately after creation</li><li>Key is only shown once, need to regenerate if lost</li></ul></div><p style="padding: 8px 12px; background: #f0fdf4; border-left: 3px solid #10b981; border-radius: 4px; font-size: 13px;"><b>🚀 How to Use:</b><br/>Configure the key in any OpenAI-compatible client (like ChatBox, OpenCat, etc.) and start using!</p><p style="margin-top: 12px; color: #10b981; font-weight: 600;">👉 Click "Create" button</p></div>'
       }
     }
+  },
+
+  // Plans (User)
+  plans: {
+    title: 'Plans',
+    description: 'Choose a plan that suits you',
+    subtitle: 'Select the plan that best fits your needs',
+    recommended: 'Recommended',
+    validityDays: '{days} days validity',
+    day: 'day',
+    concurrency: 'Concurrency',
+    includedGroups: 'Included Groups',
+    subscribe: 'Subscribe Now',
+    subscribing: 'Creating order...',
+    confirmSubscribe: 'Confirm Subscription',
+    confirmPay: 'Confirm & Pay',
+    amount: 'Order Amount',
+    noPlans: 'No Plans Available',
+    noPlansDesc: 'Administrator has not configured any plans yet, please try again later',
+    myOrders: 'My Orders',
+    noOrders: 'No orders yet',
+    pay: 'Pay',
+    orderStatus: {
+      pending: 'Pending',
+      confirmed: 'Confirmed',
+      rejected: 'Rejected',
+      cancelled: 'Cancelled'
+    },
+    orderCreated: 'Order created successfully',
+    orderCancelled: 'Order cancelled',
+    failedToLoad: 'Failed to load plans',
+    failedToCreateOrder: 'Failed to create order',
+    failedToCancelOrder: 'Failed to cancel order'
+  },
+
+  // Payment
+  payment: {
+    title: 'Order Payment',
+    description: 'Complete payment to activate the plan',
+    orderAmount: 'Order Amount',
+    scanToPay: 'Scan to Pay',
+    scanToPayDesc: 'Please scan the QR code below with Alipay or WeChat to complete payment',
+    alipay: 'Alipay',
+    wechat: 'WeChat Pay',
+    alipayHint: 'Please scan with Alipay',
+    wechatHint: 'Please scan with WeChat',
+    serviceHint: 'Scan to add customer service on WeChat',
+    noQrCode: 'No QR code available',
+    paymentNote: 'Payment Notes',
+    contactService: 'Contact Support',
+    contactServiceDesc: 'Having payment issues? Scan to contact customer support',
+    cancelOrder: 'Cancel Order',
+    checkStatus: 'Check Payment Status',
+    stillPending: 'Order is still waiting for payment confirmation',
+    orderConfirmed: 'Order Confirmed!',
+    orderConfirmedDesc: 'Your subscription has been activated. Thank you for your support!',
+    orderRejected: 'Order Rejected',
+    orderRejectedDesc: 'Your order was not approved. Please contact support if you have questions.',
+    orderCancelled: 'Order Cancelled',
+    orderCancelledDesc: 'This order has been cancelled',
+    backToPlans: 'Back to Plans',
+    loadFailed: 'Failed to load payment information',
+    cancelFailed: 'Failed to cancel order',
+    orderCancelledSuccess: 'Order cancelled successfully'
   }
 }

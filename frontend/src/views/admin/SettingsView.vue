@@ -794,6 +794,161 @@
           </div>
         </div>
 
+        <!-- Payment Settings -->
+        <div class="card">
+          <div class="border-b border-gray-100 px-6 py-4 dark:border-dark-700">
+            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">
+              {{ t('admin.settings.payment.title') }}
+            </h2>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+              {{ t('admin.settings.payment.description') }}
+            </p>
+          </div>
+          <div class="space-y-6 p-6">
+            <!-- Payment QR Codes -->
+            <div class="grid grid-cols-1 gap-6 md:grid-cols-3">
+              <!-- Alipay QR Code -->
+              <div>
+                <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {{ t('admin.settings.payment.alipayQrcode') }}
+                </label>
+                <div class="flex flex-col items-center gap-3">
+                  <div
+                    class="flex h-32 w-32 items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 dark:border-dark-600 dark:bg-dark-800"
+                    :class="{ 'border-solid': form.payment_alipay_qrcode }"
+                  >
+                    <img
+                      v-if="form.payment_alipay_qrcode"
+                      :src="form.payment_alipay_qrcode"
+                      alt="Alipay QR"
+                      class="h-full w-full object-contain"
+                    />
+                    <Icon v-else name="creditCard" size="lg" class="text-gray-400 dark:text-dark-500" />
+                  </div>
+                  <div class="flex gap-2">
+                    <label class="btn btn-secondary btn-sm cursor-pointer">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        class="hidden"
+                        @change="(e) => handlePaymentQrUpload(e, 'alipay')"
+                      />
+                      <Icon name="upload" size="sm" class="mr-1" />
+                      {{ t('admin.settings.payment.upload') }}
+                    </label>
+                    <button
+                      v-if="form.payment_alipay_qrcode"
+                      type="button"
+                      @click="form.payment_alipay_qrcode = ''"
+                      class="btn btn-secondary btn-sm text-red-600 hover:text-red-700 dark:text-red-400"
+                    >
+                      <Icon name="trash" size="sm" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- WeChat QR Code -->
+              <div>
+                <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {{ t('admin.settings.payment.wechatQrcode') }}
+                </label>
+                <div class="flex flex-col items-center gap-3">
+                  <div
+                    class="flex h-32 w-32 items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 dark:border-dark-600 dark:bg-dark-800"
+                    :class="{ 'border-solid': form.payment_wechat_qrcode }"
+                  >
+                    <img
+                      v-if="form.payment_wechat_qrcode"
+                      :src="form.payment_wechat_qrcode"
+                      alt="WeChat QR"
+                      class="h-full w-full object-contain"
+                    />
+                    <Icon v-else name="creditCard" size="lg" class="text-gray-400 dark:text-dark-500" />
+                  </div>
+                  <div class="flex gap-2">
+                    <label class="btn btn-secondary btn-sm cursor-pointer">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        class="hidden"
+                        @change="(e) => handlePaymentQrUpload(e, 'wechat')"
+                      />
+                      <Icon name="upload" size="sm" class="mr-1" />
+                      {{ t('admin.settings.payment.upload') }}
+                    </label>
+                    <button
+                      v-if="form.payment_wechat_qrcode"
+                      type="button"
+                      @click="form.payment_wechat_qrcode = ''"
+                      class="btn btn-secondary btn-sm text-red-600 hover:text-red-700 dark:text-red-400"
+                    >
+                      <Icon name="trash" size="sm" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Service QR Code -->
+              <div>
+                <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {{ t('admin.settings.payment.serviceQrcode') }}
+                </label>
+                <div class="flex flex-col items-center gap-3">
+                  <div
+                    class="flex h-32 w-32 items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-gray-300 bg-gray-50 dark:border-dark-600 dark:bg-dark-800"
+                    :class="{ 'border-solid': form.payment_service_qrcode }"
+                  >
+                    <img
+                      v-if="form.payment_service_qrcode"
+                      :src="form.payment_service_qrcode"
+                      alt="Service QR"
+                      class="h-full w-full object-contain"
+                    />
+                    <Icon v-else name="chat" size="lg" class="text-gray-400 dark:text-dark-500" />
+                  </div>
+                  <div class="flex gap-2">
+                    <label class="btn btn-secondary btn-sm cursor-pointer">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        class="hidden"
+                        @change="(e) => handlePaymentQrUpload(e, 'service')"
+                      />
+                      <Icon name="upload" size="sm" class="mr-1" />
+                      {{ t('admin.settings.payment.upload') }}
+                    </label>
+                    <button
+                      v-if="form.payment_service_qrcode"
+                      type="button"
+                      @click="form.payment_service_qrcode = ''"
+                      class="btn btn-secondary btn-sm text-red-600 hover:text-red-700 dark:text-red-400"
+                    >
+                      <Icon name="trash" size="sm" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Payment Note -->
+            <div>
+              <label class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                {{ t('admin.settings.payment.paymentNote') }}
+              </label>
+              <textarea
+                v-model="form.payment_note"
+                rows="3"
+                class="input"
+                :placeholder="t('admin.settings.payment.paymentNotePlaceholder')"
+              ></textarea>
+              <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                {{ t('admin.settings.payment.paymentNoteHint') }}
+              </p>
+            </div>
+          </div>
+        </div>
+
         <!-- SMTP Settings - Only show when email verification is enabled -->
         <div v-if="form.email_verify_enabled" class="card">
           <div
@@ -1115,7 +1270,12 @@ const form = reactive<SettingsForm>({
   ops_monitoring_enabled: true,
   ops_realtime_monitoring_enabled: true,
   ops_query_mode_default: 'auto',
-  ops_metrics_interval_seconds: 60
+  ops_metrics_interval_seconds: 60,
+  // Payment settings
+  payment_alipay_qrcode: '',
+  payment_wechat_qrcode: '',
+  payment_service_qrcode: '',
+  payment_note: ''
 })
 
 // LinuxDo OAuth redirect URL suggestion
@@ -1165,6 +1325,48 @@ function handleLogoUpload(event: Event) {
   }
   reader.onerror = () => {
     logoError.value = t('admin.settings.site.logoReadError')
+  }
+  reader.readAsDataURL(file)
+
+  // Reset input
+  input.value = ''
+}
+
+function handlePaymentQrUpload(event: Event, type: 'alipay' | 'wechat' | 'service') {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+
+  if (!file) return
+
+  // Check file size (500KB = 512000 bytes)
+  const maxSize = 500 * 1024
+  if (file.size > maxSize) {
+    appStore.showError(t('admin.settings.payment.qrcodeSizeError', { size: (file.size / 1024).toFixed(1) }))
+    input.value = ''
+    return
+  }
+
+  // Check file type
+  if (!file.type.startsWith('image/')) {
+    appStore.showError(t('admin.settings.payment.qrcodeTypeError'))
+    input.value = ''
+    return
+  }
+
+  // Convert to base64
+  const reader = new FileReader()
+  reader.onload = (e) => {
+    const result = e.target?.result as string
+    if (type === 'alipay') {
+      form.payment_alipay_qrcode = result
+    } else if (type === 'wechat') {
+      form.payment_wechat_qrcode = result
+    } else {
+      form.payment_service_qrcode = result
+    }
+  }
+  reader.onerror = () => {
+    appStore.showError(t('admin.settings.payment.qrcodeReadError'))
   }
   reader.readAsDataURL(file)
 
@@ -1228,7 +1430,11 @@ async function saveSettings() {
       fallback_model_gemini: form.fallback_model_gemini,
       fallback_model_antigravity: form.fallback_model_antigravity,
       enable_identity_patch: form.enable_identity_patch,
-      identity_patch_prompt: form.identity_patch_prompt
+      identity_patch_prompt: form.identity_patch_prompt,
+      payment_alipay_qrcode: form.payment_alipay_qrcode,
+      payment_wechat_qrcode: form.payment_wechat_qrcode,
+      payment_service_qrcode: form.payment_service_qrcode,
+      payment_note: form.payment_note
     }
     const updated = await adminAPI.settings.updateSettings(payload)
     Object.assign(form, updated)

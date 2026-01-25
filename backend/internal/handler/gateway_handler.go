@@ -17,6 +17,7 @@ import (
 	pkgerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ip"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/tracing"
 	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
@@ -31,6 +32,7 @@ type GatewayHandler struct {
 	userService               *service.UserService
 	billingCacheService       *service.BillingCacheService
 	concurrencyHelper         *ConcurrencyHelper
+	tracingHelper             *TracingHelper
 	maxAccountSwitches        int
 	maxAccountSwitchesGemini  int
 }
@@ -64,6 +66,7 @@ func NewGatewayHandler(
 		userService:               userService,
 		billingCacheService:       billingCacheService,
 		concurrencyHelper:         NewConcurrencyHelper(concurrencyService, SSEPingFormatClaude, pingInterval),
+		tracingHelper:             NewTracingHelper(cfg),
 		maxAccountSwitches:        maxAccountSwitches,
 		maxAccountSwitchesGemini:  maxAccountSwitchesGemini,
 	}
@@ -72,6 +75,12 @@ func NewGatewayHandler(
 // Messages handles Claude API compatible messages endpoint
 // POST /v1/messages
 func (h *GatewayHandler) Messages(c *gin.Context) {
+	// 记录请求开始
+	startTime := h.tracingHelper.LogRequestStart(c, "anthropic")
+
+	// 获取请求追踪器
+	tracer := tracing.GetTracer(c)
+
 	// 从context获取apiKey和user（ApiKeyAuth中间件已设置）
 	apiKey, ok := middleware2.GetAPIKeyFromContext(c)
 	if !ok {
@@ -83,6 +92,11 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 	if !ok {
 		h.errorResponse(c, http.StatusInternalServerError, "api_error", "User context not found")
 		return
+	}
+
+	// 设置追踪信息：用户ID
+	if tracer != nil {
+		tracer.SetUserID(subject.UserID)
 	}
 
 	// 读取请求体
@@ -122,6 +136,12 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 		return
 	}
 
+	// 设置追踪信息：模型和流式标志
+	if tracer != nil {
+		tracer.SetModel(reqModel)
+		tracer.SetStream(reqStream)
+	}
+
 	// Track if we've started streaming (for error handling)
 	streamStarted := false
 
@@ -150,7 +170,13 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 	}()
 
 	// 1. 首先获取用户并发槽位
+	if tracer != nil {
+		tracer.MarkWaitStart()
+	}
 	userReleaseFunc, err := h.concurrencyHelper.AcquireUserSlotWithWait(c, subject.UserID, subject.Concurrency, reqStream, &streamStarted)
+	if tracer != nil {
+		tracer.MarkWaitEnd()
+	}
 	if err != nil {
 		log.Printf("User concurrency acquire failed: %v", err)
 		h.handleConcurrencyError(c, err, "user", streamStarted)
@@ -208,6 +234,12 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 			}
 			account := selection.Account
 			setOpsSelectedAccount(c, account.ID)
+
+			// 设置追踪信息：账号ID和平台
+			if tracer != nil {
+				tracer.SetAccountID(account.ID)
+				tracer.SetPlatform(account.Platform)
+			}
 
 			// 检查请求拦截（预热请求、SUGGESTION MODE等）
 			if account.IsInterceptWarmupEnabled() {
@@ -278,10 +310,16 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 
 			// 转发请求 - 根据账号平台分流
 			var result *service.ForwardResult
+			if tracer != nil {
+				tracer.MarkUpstreamStart()
+			}
 			if account.Platform == service.PlatformAntigravity {
 				result, err = h.antigravityGatewayService.ForwardGemini(c.Request.Context(), c, account, reqModel, "generateContent", reqStream, body)
 			} else {
 				result, err = h.geminiCompatService.Forward(c.Request.Context(), c, account, body)
+			}
+			if tracer != nil {
+				tracer.MarkUpstreamEnd()
 			}
 			if accountReleaseFunc != nil {
 				accountReleaseFunc()
@@ -346,6 +384,12 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 		}
 		account := selection.Account
 		setOpsSelectedAccount(c, account.ID)
+
+		// 设置追踪信息：账号ID和平台
+		if tracer != nil {
+			tracer.SetAccountID(account.ID)
+			tracer.SetPlatform(account.Platform)
+		}
 
 		// 检查请求拦截（预热请求、SUGGESTION MODE等）
 		if account.IsInterceptWarmupEnabled() {
@@ -414,10 +458,16 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 
 		// 转发请求 - 根据账号平台分流
 		var result *service.ForwardResult
+		if tracer != nil {
+			tracer.MarkUpstreamStart()
+		}
 		if account.Platform == service.PlatformAntigravity {
 			result, err = h.antigravityGatewayService.Forward(c.Request.Context(), c, account, body)
 		} else {
 			result, err = h.gatewayService.Forward(c.Request.Context(), c, account, parsedReq)
+		}
+		if tracer != nil {
+			tracer.MarkUpstreamEnd()
 		}
 		if accountReleaseFunc != nil {
 			accountReleaseFunc()
@@ -439,6 +489,14 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 			log.Printf("Account %d: Forward request failed: %v", account.ID, err)
 			return
 		}
+
+		// 记录请求完成（cost 将在 RecordUsage 中异步计算）
+		h.tracingHelper.LogRequestCompleted(c, "anthropic", startTime,
+			subject.UserID, reqModel, account.ID, http.StatusOK, 0.0)
+
+		// 记录请求完成（cost 将在 RecordUsage 中异步计算）
+		h.tracingHelper.LogRequestCompleted(c, "anthropic", startTime,
+			subject.UserID, reqModel, account.ID, http.StatusOK, 0.0)
 
 		// 捕获请求信息（用于异步记录，避免在 goroutine 中访问 gin.Context）
 		userAgent := c.GetHeader("User-Agent")

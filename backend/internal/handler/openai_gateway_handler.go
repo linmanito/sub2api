@@ -25,6 +25,7 @@ type OpenAIGatewayHandler struct {
 	gatewayService      *service.OpenAIGatewayService
 	billingCacheService *service.BillingCacheService
 	concurrencyHelper   *ConcurrencyHelper
+	tracingHelper       *TracingHelper
 	maxAccountSwitches  int
 }
 
@@ -47,6 +48,7 @@ func NewOpenAIGatewayHandler(
 		gatewayService:      gatewayService,
 		billingCacheService: billingCacheService,
 		concurrencyHelper:   NewConcurrencyHelper(concurrencyService, SSEPingFormatComment, pingInterval),
+		tracingHelper:       NewTracingHelper(cfg),
 		maxAccountSwitches:  maxAccountSwitches,
 	}
 }
@@ -54,6 +56,9 @@ func NewOpenAIGatewayHandler(
 // Responses handles OpenAI Responses API endpoint
 // POST /openai/v1/responses
 func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
+	// 记录请求开始
+	startTime := h.tracingHelper.LogRequestStart(c, "openai")
+
 	// Get apiKey and user from context (set by ApiKeyAuth middleware)
 	apiKey, ok := middleware2.GetAPIKeyFromContext(c)
 	if !ok {
@@ -95,6 +100,9 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 	// Extract model and stream
 	reqModel, _ := reqBody["model"].(string)
 	reqStream, _ := reqBody["stream"].(bool)
+
+	// 设置追踪信息：用户和模型
+	h.tracingHelper.SetupTracer(c, subject.UserID, reqModel)
 
 	// 验证 model 必填
 	if reqModel == "" {
@@ -289,6 +297,10 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 			log.Printf("Account %d: Forward request failed: %v", account.ID, err)
 			return
 		}
+
+		// 记录请求完成（cost 将在 RecordUsage 中异步计算）
+		h.tracingHelper.LogRequestCompleted(c, "openai", startTime,
+			subject.UserID, reqModel, account.ID, http.StatusOK, 0.0)
 
 		// 捕获请求信息（用于异步记录，避免在 goroutine 中访问 gin.Context）
 		userAgent := c.GetHeader("User-Agent")

@@ -111,6 +111,12 @@ backend/config.yaml
 deploy/config.yaml
 backend/.installed
 
+# 部署配置文件（包含服务器信息和密钥路径）
+deploy.config
+deploy.config.*
+!deploy.config.example
+!deploy.config.aws.example
+
 # ===================
 # 其他
 # ===================

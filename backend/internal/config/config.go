@@ -41,6 +41,7 @@ type Config struct {
 	Server       ServerConfig               `mapstructure:"server"`
 	CORS         CORSConfig                 `mapstructure:"cors"`
 	Security     SecurityConfig             `mapstructure:"security"`
+	Logging      LoggingConfig              `mapstructure:"logging"`
 	Billing      BillingConfig              `mapstructure:"billing"`
 	Turnstile    TurnstileConfig            `mapstructure:"turnstile"`
 	Database     DatabaseConfig             `mapstructure:"database"`
@@ -155,6 +156,21 @@ type ServerConfig struct {
 type CORSConfig struct {
 	AllowedOrigins   []string `mapstructure:"allowed_origins"`
 	AllowCredentials bool     `mapstructure:"allow_credentials"`
+}
+
+// LoggingConfig 日志配置
+type LoggingConfig struct {
+	Level          string               `mapstructure:"level"`           // 日志级别: debug, info, warn, error
+	Format         string               `mapstructure:"format"`          // 日志格式: text, json
+	RequestTracing RequestTracingConfig `mapstructure:"request_tracing"` // 请求追踪配置
+}
+
+// RequestTracingConfig 请求追踪配置
+type RequestTracingConfig struct {
+	Enabled        bool    `mapstructure:"enabled"`         // 是否启用请求追踪
+	Detailed       bool    `mapstructure:"detailed"`        // 是否记录详细步骤时间戳
+	VerboseLogging bool    `mapstructure:"verbose_logging"` // 是否记录详细请求日志（开始/完成/阶段）
+	SampleRate     float64 `mapstructure:"sample_rate"`     // 采样率 0.0-1.0
 }
 
 type SecurityConfig struct {

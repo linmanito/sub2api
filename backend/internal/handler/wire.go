@@ -26,6 +26,9 @@ func ProvideAdminHandlers(
 	subscriptionHandler *admin.SubscriptionHandler,
 	usageHandler *admin.UsageHandler,
 	userAttributeHandler *admin.UserAttributeHandler,
+	planHandler *admin.PlanHandler,
+	orderHandler *admin.OrderHandler,
+	uploadHandler *admin.UploadHandler,
 ) *AdminHandlers {
 	return &AdminHandlers{
 		Dashboard:        dashboardHandler,
@@ -45,6 +48,9 @@ func ProvideAdminHandlers(
 		Subscription:     subscriptionHandler,
 		Usage:            usageHandler,
 		UserAttribute:    userAttributeHandler,
+		Plan:             planHandler,
+		Order:            orderHandler,
+		Upload:           uploadHandler,
 	}
 }
 
@@ -66,6 +72,8 @@ func ProvideHandlers(
 	usageHandler *UsageHandler,
 	redeemHandler *RedeemHandler,
 	subscriptionHandler *SubscriptionHandler,
+	planHandler *PlanHandler,
+	orderHandler *OrderHandler,
 	adminHandlers *AdminHandlers,
 	gatewayHandler *GatewayHandler,
 	openaiGatewayHandler *OpenAIGatewayHandler,
@@ -79,6 +87,8 @@ func ProvideHandlers(
 		Usage:         usageHandler,
 		Redeem:        redeemHandler,
 		Subscription:  subscriptionHandler,
+		Plan:          planHandler,
+		Order:         orderHandler,
 		Admin:         adminHandlers,
 		Gateway:       gatewayHandler,
 		OpenAIGateway: openaiGatewayHandler,
@@ -96,6 +106,8 @@ var ProviderSet = wire.NewSet(
 	NewUsageHandler,
 	NewRedeemHandler,
 	NewSubscriptionHandler,
+	NewPlanHandler,
+	NewOrderHandler,
 	NewGatewayHandler,
 	NewOpenAIGatewayHandler,
 	NewTotpHandler,
@@ -119,6 +131,9 @@ var ProviderSet = wire.NewSet(
 	admin.NewSubscriptionHandler,
 	admin.NewUsageHandler,
 	admin.NewUserAttributeHandler,
+	admin.NewPlanHandler,
+	admin.NewOrderHandler,
+	admin.NewUploadHandler,
 
 	// AdminHandlers and Handlers constructors
 	ProvideAdminHandlers,

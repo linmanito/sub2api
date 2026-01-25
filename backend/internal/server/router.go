@@ -5,6 +5,7 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/handler"
+	"github.com/Wei-Shaw/sub2api/internal/handler/admin"
 	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/server/routes"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -29,9 +30,11 @@ func SetupRouter(
 	redisClient *redis.Client,
 ) *gin.Engine {
 	// 应用中间件
-	r.Use(middleware2.Logger())
-	r.Use(middleware2.CORS(cfg.CORS))
-	r.Use(middleware2.SecurityHeaders(cfg.Security.CSP))
+	r.Use(middleware2.RequestID())                 // Request ID 生成（必须在最前面）
+	r.Use(middleware2.RequestTracer(cfg))          // 请求耗时追踪
+	r.Use(middleware2.Logger())                    // 请求日志
+	r.Use(middleware2.CORS(cfg.CORS))              // 跨域配置
+	r.Use(middleware2.SecurityHeaders(cfg.Security.CSP)) // 安全头
 
 	// Serve embedded frontend with settings injection if available
 	if web.HasEmbeddedFrontend() {
@@ -67,6 +70,9 @@ func registerRoutes(
 ) {
 	// 通用路由（健康检查、状态等）
 	routes.RegisterCommonRoutes(r)
+
+	// 上传文件静态服务
+	r.GET("/uploads/*filepath", admin.ServeUploads())
 
 	// API v1
 	v1 := r.Group("/api/v1")

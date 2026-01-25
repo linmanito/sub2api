@@ -23,6 +23,9 @@ type AdminHandlers struct {
 	Subscription     *admin.SubscriptionHandler
 	Usage            *admin.UsageHandler
 	UserAttribute    *admin.UserAttributeHandler
+	Plan             *admin.PlanHandler
+	Order            *admin.OrderHandler
+	Upload           *admin.UploadHandler
 }
 
 // Handlers contains all HTTP handlers
@@ -33,6 +36,8 @@ type Handlers struct {
 	Usage         *UsageHandler
 	Redeem        *RedeemHandler
 	Subscription  *SubscriptionHandler
+	Plan          *PlanHandler
+	Order         *OrderHandler
 	Admin         *AdminHandlers
 	Gateway       *GatewayHandler
 	OpenAIGateway *OpenAIGatewayHandler

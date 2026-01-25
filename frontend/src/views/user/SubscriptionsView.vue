@@ -118,7 +118,7 @@
               >
                 {{
                   t('userSubscriptions.resetIn', {
-                    time: formatResetTime(subscription.daily_window_start, 24)
+                    time: formatResetTime(subscription.daily_window_start, 5)
                   })
                 }}
               </p>

@@ -79,5 +79,20 @@ func RegisterUserRoutes(
 			subscriptions.GET("/progress", h.Subscription.GetProgress)
 			subscriptions.GET("/summary", h.Subscription.GetSummary)
 		}
+
+		// 套餐商城
+		plans := authenticated.Group("/plans")
+		{
+			plans.GET("", h.Plan.List)
+		}
+
+		// 用户订单
+		orders := authenticated.Group("/orders")
+		{
+			orders.GET("", h.Order.List)
+			orders.POST("", h.Order.Create)
+			orders.POST("/:id/cancel", h.Order.Cancel)
+			orders.GET("/:id/payment", h.Order.GetPaymentInfo)
+		}
 	}
 }

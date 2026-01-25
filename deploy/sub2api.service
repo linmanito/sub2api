@@ -16,6 +16,12 @@ StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=sub2api
 
+# 日志配置说明:
+# - 应用程序日志会自动写入 /opt/sub2api/logs/ 目录
+# - 日志文件按天轮换,保留最近30个备份和90天历史
+# - 同时也会输出到 systemd journal (可用 journalctl -u sub2api 查看)
+# - 日志时间格式: yyyy-MM-dd HH:mm:ss
+
 # Security hardening
 NoNewPrivileges=true
 ProtectSystem=strict

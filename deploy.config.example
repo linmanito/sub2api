@@ -1,0 +1,22 @@
+# Sub2API 部署配置文件
+# 复制此文件为 deploy.config 并修改为你的实际配置
+# cp deploy.config.example deploy.config
+
+# 服务器配置
+SERVER_USER="ubuntu"                    # SSH 用户名（AWS EC2 常用: ubuntu, ec2-user）
+SERVER_HOST="your-server-ip"            # 服务器 IP 或域名（例如: ec2-xx-xx-xx-xx.compute.amazonaws.com）
+SERVER_PORT="22"                        # SSH 端口（默认 22）
+
+# AWS EC2 密钥文件配置
+SSH_KEY_FILE=""                         # SSH 密钥文件路径（例如: ~/.ssh/my-key.pem）
+                                        # 留空则使用默认 SSH 配置
+
+# 远程路径配置
+REMOTE_DIR="/home/sub2api"              # 服务器上的部署目录
+SERVICE_NAME="sub2api"                  # systemd 服务名称
+
+# 本地路径配置
+LOCAL_BINARY="backend/bin/server"       # 本地编译后的二进制文件路径
+
+# 备份配置
+KEEP_BACKUPS=5                          # 保留最近几个备份文件（0=不限制）

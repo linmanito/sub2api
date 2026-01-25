@@ -136,6 +136,9 @@ func (h *GatewayHandler) GeminiV1BetaGetModel(c *gin.Context) {
 // POST /v1beta/models/{model}:generateContent
 // POST /v1beta/models/{model}:streamGenerateContent?alt=sse
 func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
+	// 记录请求开始
+	startTime := h.tracingHelper.LogRequestStart(c, "gemini")
+
 	apiKey, ok := middleware.GetAPIKeyFromContext(c)
 	if !ok || apiKey == nil {
 		googleError(c, http.StatusUnauthorized, "Invalid API key")
@@ -160,6 +163,9 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 		googleError(c, http.StatusNotFound, err.Error())
 		return
 	}
+
+	// 设置追踪信息：用户和模型
+	h.tracingHelper.SetupTracer(c, apiKey.UserID, modelName)
 
 	stream := action == "streamGenerateContent"
 
@@ -285,6 +291,9 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 			sessionBoundAccountID = account.ID
 		}
 
+		// 设置账户追踪信息
+		h.tracingHelper.SetTracerAccount(c, account.ID, account.Platform)
+
 		// 4) account concurrency slot
 		accountReleaseFunc := selection.ReleaseFunc
 		if !selection.Acquired {
@@ -310,6 +319,9 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 				}
 			}()
 
+			// 标记等待开始
+			h.tracingHelper.MarkWaitStart(c)
+
 			accountReleaseFunc, err = geminiConcurrency.AcquireAccountSlotWithWaitTimeout(
 				c,
 				account.ID,
@@ -318,6 +330,10 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 				stream,
 				&streamStarted,
 			)
+
+			// 标记等待结束
+			h.tracingHelper.MarkWaitEnd(c)
+
 			if err != nil {
 				googleError(c, http.StatusTooManyRequests, err.Error())
 				return
@@ -334,12 +350,19 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 		accountReleaseFunc = wrapReleaseOnDone(c.Request.Context(), accountReleaseFunc)
 
 		// 5) forward (根据平台分流)
+		// 标记上游请求开始
+		h.tracingHelper.MarkUpstreamStart(c)
+
 		var result *service.ForwardResult
 		if account.Platform == service.PlatformAntigravity {
 			result, err = h.antigravityGatewayService.ForwardGemini(c.Request.Context(), c, account, modelName, action, stream, body)
 		} else {
 			result, err = h.geminiCompatService.ForwardNative(c.Request.Context(), c, account, modelName, action, stream, body)
 		}
+
+		// 标记上游请求结束
+		h.tracingHelper.MarkUpstreamEnd(c, stream)
+
 		if accountReleaseFunc != nil {
 			accountReleaseFunc()
 		}
@@ -361,6 +384,10 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 			log.Printf("Gemini native forward failed: %v", err)
 			return
 		}
+
+		// 记录请求完成（cost 将在 RecordUsage 中异步计算）
+		h.tracingHelper.LogRequestCompleted(c, "gemini", startTime,
+			apiKey.UserID, modelName, account.ID, http.StatusOK, 0.0)
 
 		// 捕获请求信息（用于异步记录，避免在 goroutine 中访问 gin.Context）
 		userAgent := c.GetHeader("User-Agent")

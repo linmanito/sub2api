@@ -159,6 +159,22 @@ const (
 
 	// SettingKeyStreamTimeoutSettings stores JSON config for stream timeout handling.
 	SettingKeyStreamTimeoutSettings = "stream_timeout_settings"
+
+	// =========================
+	// Payment Settings (套餐支付配置)
+	// =========================
+
+	// SettingKeyPaymentAlipayQrcode stores the Alipay QR code image path.
+	SettingKeyPaymentAlipayQrcode = "payment_alipay_qrcode"
+
+	// SettingKeyPaymentWechatQrcode stores the WeChat QR code image path.
+	SettingKeyPaymentWechatQrcode = "payment_wechat_qrcode"
+
+	// SettingKeyPaymentServiceQrcode stores the service WeChat QR code image path.
+	SettingKeyPaymentServiceQrcode = "payment_service_qrcode"
+
+	// SettingKeyPaymentNote stores the payment note text.
+	SettingKeyPaymentNote = "payment_note"
 )
 
 // AdminAPIKeyPrefix is the prefix for admin API keys (distinct from user "sk-" keys).

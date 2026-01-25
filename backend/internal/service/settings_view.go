@@ -56,6 +56,12 @@ type SystemSettings struct {
 	OpsRealtimeMonitoringEnabled bool
 	OpsQueryModeDefault          string
 	OpsMetricsIntervalSeconds    int
+
+	// Payment settings (套餐支付配置)
+	PaymentAlipayQrcode  string `json:"payment_alipay_qrcode"`
+	PaymentWechatQrcode  string `json:"payment_wechat_qrcode"`
+	PaymentServiceQrcode string `json:"payment_service_qrcode"`
+	PaymentNote          string `json:"payment_note"`
 }
 
 type PublicSettings struct {

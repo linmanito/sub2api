@@ -9,6 +9,8 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/accountgroup"
 	"github.com/Wei-Shaw/sub2api/ent/apikey"
 	"github.com/Wei-Shaw/sub2api/ent/group"
+	"github.com/Wei-Shaw/sub2api/ent/order"
+	"github.com/Wei-Shaw/sub2api/ent/plan"
 	"github.com/Wei-Shaw/sub2api/ent/promocode"
 	"github.com/Wei-Shaw/sub2api/ent/promocodeusage"
 	"github.com/Wei-Shaw/sub2api/ent/proxy"
@@ -285,6 +287,114 @@ func init() {
 	groupDescModelRoutingEnabled := groupFields[17].Descriptor()
 	// group.DefaultModelRoutingEnabled holds the default value on creation for the model_routing_enabled field.
 	group.DefaultModelRoutingEnabled = groupDescModelRoutingEnabled.Default.(bool)
+	orderMixin := schema.Order{}.Mixin()
+	orderMixinHooks1 := orderMixin[1].Hooks()
+	order.Hooks[0] = orderMixinHooks1[0]
+	orderMixinInters1 := orderMixin[1].Interceptors()
+	order.Interceptors[0] = orderMixinInters1[0]
+	orderMixinFields0 := orderMixin[0].Fields()
+	_ = orderMixinFields0
+	orderFields := schema.Order{}.Fields()
+	_ = orderFields
+	// orderDescCreatedAt is the schema descriptor for created_at field.
+	orderDescCreatedAt := orderMixinFields0[0].Descriptor()
+	// order.DefaultCreatedAt holds the default value on creation for the created_at field.
+	order.DefaultCreatedAt = orderDescCreatedAt.Default.(func() time.Time)
+	// orderDescUpdatedAt is the schema descriptor for updated_at field.
+	orderDescUpdatedAt := orderMixinFields0[1].Descriptor()
+	// order.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	order.DefaultUpdatedAt = orderDescUpdatedAt.Default.(func() time.Time)
+	// order.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	order.UpdateDefaultUpdatedAt = orderDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// orderDescStatus is the schema descriptor for status field.
+	orderDescStatus := orderFields[2].Descriptor()
+	// order.DefaultStatus holds the default value on creation for the status field.
+	order.DefaultStatus = orderDescStatus.Default.(string)
+	// order.StatusValidator is a validator for the "status" field. It is called by the builders before save.
+	order.StatusValidator = orderDescStatus.Validators[0].(func(string) error)
+	// orderDescAmount is the schema descriptor for amount field.
+	orderDescAmount := orderFields[3].Descriptor()
+	// order.DefaultAmount holds the default value on creation for the amount field.
+	order.DefaultAmount = orderDescAmount.Default.(int)
+	// orderDescOrderedAt is the schema descriptor for ordered_at field.
+	orderDescOrderedAt := orderFields[7].Descriptor()
+	// order.DefaultOrderedAt holds the default value on creation for the ordered_at field.
+	order.DefaultOrderedAt = orderDescOrderedAt.Default.(func() time.Time)
+	planMixin := schema.Plan{}.Mixin()
+	planMixinHooks1 := planMixin[1].Hooks()
+	plan.Hooks[0] = planMixinHooks1[0]
+	planMixinInters1 := planMixin[1].Interceptors()
+	plan.Interceptors[0] = planMixinInters1[0]
+	planMixinFields0 := planMixin[0].Fields()
+	_ = planMixinFields0
+	planFields := schema.Plan{}.Fields()
+	_ = planFields
+	// planDescCreatedAt is the schema descriptor for created_at field.
+	planDescCreatedAt := planMixinFields0[0].Descriptor()
+	// plan.DefaultCreatedAt holds the default value on creation for the created_at field.
+	plan.DefaultCreatedAt = planDescCreatedAt.Default.(func() time.Time)
+	// planDescUpdatedAt is the schema descriptor for updated_at field.
+	planDescUpdatedAt := planMixinFields0[1].Descriptor()
+	// plan.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	plan.DefaultUpdatedAt = planDescUpdatedAt.Default.(func() time.Time)
+	// plan.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	plan.UpdateDefaultUpdatedAt = planDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// planDescName is the schema descriptor for name field.
+	planDescName := planFields[0].Descriptor()
+	// plan.NameValidator is a validator for the "name" field. It is called by the builders before save.
+	plan.NameValidator = func() func(string) error {
+		validators := planDescName.Validators
+		fns := [...]func(string) error{
+			validators[0].(func(string) error),
+			validators[1].(func(string) error),
+		}
+		return func(name string) error {
+			for _, fn := range fns {
+				if err := fn(name); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+	}()
+	// planDescPrice is the schema descriptor for price field.
+	planDescPrice := planFields[2].Descriptor()
+	// plan.DefaultPrice holds the default value on creation for the price field.
+	plan.DefaultPrice = planDescPrice.Default.(int)
+	// planDescCurrency is the schema descriptor for currency field.
+	planDescCurrency := planFields[3].Descriptor()
+	// plan.DefaultCurrency holds the default value on creation for the currency field.
+	plan.DefaultCurrency = planDescCurrency.Default.(string)
+	// plan.CurrencyValidator is a validator for the "currency" field. It is called by the builders before save.
+	plan.CurrencyValidator = planDescCurrency.Validators[0].(func(string) error)
+	// planDescValidityDays is the schema descriptor for validity_days field.
+	planDescValidityDays := planFields[4].Descriptor()
+	// plan.DefaultValidityDays holds the default value on creation for the validity_days field.
+	plan.DefaultValidityDays = planDescValidityDays.Default.(int)
+	// planDescConcurrency is the schema descriptor for concurrency field.
+	planDescConcurrency := planFields[5].Descriptor()
+	// plan.DefaultConcurrency holds the default value on creation for the concurrency field.
+	plan.DefaultConcurrency = planDescConcurrency.Default.(int)
+	// planDescIcon is the schema descriptor for icon field.
+	planDescIcon := planFields[7].Descriptor()
+	// plan.DefaultIcon holds the default value on creation for the icon field.
+	plan.DefaultIcon = planDescIcon.Default.(string)
+	// plan.IconValidator is a validator for the "icon" field. It is called by the builders before save.
+	plan.IconValidator = planDescIcon.Validators[0].(func(string) error)
+	// planDescIsRecommended is the schema descriptor for is_recommended field.
+	planDescIsRecommended := planFields[8].Descriptor()
+	// plan.DefaultIsRecommended holds the default value on creation for the is_recommended field.
+	plan.DefaultIsRecommended = planDescIsRecommended.Default.(bool)
+	// planDescStatus is the schema descriptor for status field.
+	planDescStatus := planFields[9].Descriptor()
+	// plan.DefaultStatus holds the default value on creation for the status field.
+	plan.DefaultStatus = planDescStatus.Default.(string)
+	// plan.StatusValidator is a validator for the "status" field. It is called by the builders before save.
+	plan.StatusValidator = planDescStatus.Validators[0].(func(string) error)
+	// planDescSortOrder is the schema descriptor for sort_order field.
+	planDescSortOrder := planFields[10].Descriptor()
+	// plan.DefaultSortOrder holds the default value on creation for the sort_order field.
+	plan.DefaultSortOrder = planDescSortOrder.Default.(int)
 	promocodeFields := schema.PromoCode{}.Fields()
 	_ = promocodeFields
 	// promocodeDescCode is the schema descriptor for code field.

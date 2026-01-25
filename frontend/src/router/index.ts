@@ -175,6 +175,30 @@ const routes: RouteRecordRaw[] = [
       descriptionKey: 'userSubscriptions.description'
     }
   },
+  {
+    path: '/plans',
+    name: 'Plans',
+    component: () => import('@/views/user/PlansView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: false,
+      title: 'Plans',
+      titleKey: 'plans.title',
+      descriptionKey: 'plans.description'
+    }
+  },
+  {
+    path: '/payment/:id',
+    name: 'Payment',
+    component: () => import('@/views/user/PaymentView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: false,
+      title: 'Payment',
+      titleKey: 'payment.title',
+      descriptionKey: 'payment.description'
+    }
+  },
 
   // ==================== Admin Routes ====================
   {
@@ -311,6 +335,30 @@ const routes: RouteRecordRaw[] = [
       title: 'Usage Records',
       titleKey: 'admin.usage.title',
       descriptionKey: 'admin.usage.description'
+    }
+  },
+  {
+    path: '/admin/plans',
+    name: 'AdminPlans',
+    component: () => import('@/views/admin/PlansView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: 'Plan Management',
+      titleKey: 'admin.plans.title',
+      descriptionKey: 'admin.plans.description'
+    }
+  },
+  {
+    path: '/admin/orders',
+    name: 'AdminOrders',
+    component: () => import('@/views/admin/OrdersView.vue'),
+    meta: {
+      requiresAuth: true,
+      requiresAdmin: true,
+      title: 'Order Management',
+      titleKey: 'admin.orders.title',
+      descriptionKey: 'admin.orders.description'
     }
   },
 

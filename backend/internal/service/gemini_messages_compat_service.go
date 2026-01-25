@@ -1231,14 +1231,19 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 	}
 
 	isOAuth := account.Type == AccountTypeOAuth
+	// OAuth accounts with project_id use Code Assist API which wraps responses;
+	// OAuth accounts without project_id use AI Studio API directly (same format as API key).
+	projectID := strings.TrimSpace(account.GetCredential("project_id"))
+	isCodeAssistOAuth := isOAuth && projectID != ""
+	log.Printf("[GeminiNative] account=%s isOAuth=%v project_id=%q isCodeAssistOAuth=%v stream=%v", account.Name, isOAuth, projectID, isCodeAssistOAuth, stream)
 
 	if resp.StatusCode >= 400 {
 		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
-		tempMatched := false
-		if s.rateLimitService != nil {
-			tempMatched = s.rateLimitService.HandleTempUnschedulable(ctx, account, resp.StatusCode, respBody)
-		}
-		s.handleGeminiUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody)
+		//tempMatched := false
+		//if s.rateLimitService != nil {
+		//	tempMatched = s.rateLimitService.HandleTempUnschedulable(ctx, account, resp.StatusCode, respBody)
+		//}
+		//s.handleGeminiUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody)
 
 		// Best-effort fallback for OAuth tokens missing AI Studio scopes when calling countTokens.
 		// This avoids Gemini SDKs failing hard during preflight token counting.
@@ -1255,8 +1260,14 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 			}, nil
 		}
 
+		tempMatched := false
+		if s.rateLimitService != nil {
+			tempMatched = s.rateLimitService.HandleTempUnschedulable(ctx, account, resp.StatusCode, respBody)
+		}
+		s.handleGeminiUpstreamError(ctx, account, resp.StatusCode, resp.Header, respBody)
+
 		if tempMatched {
-			evBody := unwrapIfNeeded(isOAuth, respBody)
+			evBody := unwrapIfNeeded(isCodeAssistOAuth, respBody)
 			upstreamMsg := strings.TrimSpace(extractUpstreamErrorMessage(evBody))
 			upstreamMsg = sanitizeUpstreamErrorMessage(upstreamMsg)
 			upstreamDetail := ""
@@ -1280,7 +1291,7 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 			return nil, &UpstreamFailoverError{StatusCode: resp.StatusCode}
 		}
 		if s.shouldFailoverGeminiUpstreamError(resp.StatusCode) {
-			evBody := unwrapIfNeeded(isOAuth, respBody)
+			evBody := unwrapIfNeeded(isCodeAssistOAuth, respBody)
 			upstreamMsg := strings.TrimSpace(extractUpstreamErrorMessage(evBody))
 			upstreamMsg = sanitizeUpstreamErrorMessage(upstreamMsg)
 			upstreamDetail := ""
@@ -1304,7 +1315,7 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 			return nil, &UpstreamFailoverError{StatusCode: resp.StatusCode}
 		}
 
-		respBody = unwrapIfNeeded(isOAuth, respBody)
+		respBody = unwrapIfNeeded(isCodeAssistOAuth, respBody)
 		upstreamMsg := strings.TrimSpace(extractUpstreamErrorMessage(respBody))
 		upstreamMsg = sanitizeUpstreamErrorMessage(upstreamMsg)
 		upstreamDetail := ""
@@ -1343,7 +1354,7 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 	var firstTokenMs *int
 
 	if stream {
-		streamRes, err := s.handleNativeStreamingResponse(c, resp, startTime, isOAuth)
+		streamRes, err := s.handleNativeStreamingResponse(c, resp, startTime, isCodeAssistOAuth)
 		if err != nil {
 			return nil, err
 		}
@@ -1351,7 +1362,7 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 		firstTokenMs = streamRes.firstTokenMs
 	} else {
 		if useUpstreamStream {
-			collected, usageObj, err := collectGeminiSSE(resp.Body, isOAuth)
+			collected, usageObj, err := collectGeminiSSE(resp.Body, isCodeAssistOAuth)
 			if err != nil {
 				return nil, s.writeGoogleError(c, http.StatusBadGateway, "Failed to read upstream stream")
 			}
@@ -1359,7 +1370,7 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 			c.Data(http.StatusOK, "application/json", b)
 			usage = usageObj
 		} else {
-			usageResp, err := s.handleNativeNonStreamingResponse(c, resp, isOAuth)
+			usageResp, err := s.handleNativeNonStreamingResponse(c, resp, isCodeAssistOAuth)
 			if err != nil {
 				return nil, err
 			}
@@ -2210,6 +2221,28 @@ type UpstreamHTTPResult struct {
 	Body       []byte
 }
 
+// parseSSEToJSON 尝试将 SSE 格式的响应解析为 JSON
+// 用于处理某些第三方中转服务错误地返回 SSE 格式的情况
+func parseSSEToJSON(body []byte) ([]byte, bool) {
+	bodyStr := string(body)
+	lines := strings.Split(bodyStr, "\n")
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "data:") {
+			payload := strings.TrimSpace(strings.TrimPrefix(trimmed, "data:"))
+			if payload != "" && payload != "[DONE]" {
+				// 验证是否是有效的 JSON
+				var test map[string]any
+				if err := json.Unmarshal([]byte(payload), &test); err == nil {
+					return []byte(payload), true
+				}
+			}
+		}
+	}
+	return body, false
+}
+
 func (s *GeminiMessagesCompatService) handleNativeNonStreamingResponse(c *gin.Context, resp *http.Response, isOAuth bool) (*ClaudeUsage, error) {
 	// Log response headers for debugging
 	log.Printf("[GeminiAPI] ========== Response Headers ==========")
@@ -2223,6 +2256,15 @@ func (s *GeminiMessagesCompatService) handleNativeNonStreamingResponse(c *gin.Co
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
+	}
+
+	// 检测并处理 SSE 格式响应（某些第三方中转服务可能返回 SSE 格式）
+	if strings.HasPrefix(string(respBody), "data:") {
+		log.Printf("[GeminiAPI] Detected SSE format in non-streaming response, attempting to parse...")
+		if jsonBody, ok := parseSSEToJSON(respBody); ok {
+			log.Printf("[GeminiAPI] Successfully converted SSE to JSON")
+			respBody = jsonBody
+		}
 	}
 
 	var parsed map[string]any
@@ -2284,10 +2326,19 @@ func (s *GeminiMessagesCompatService) handleNativeStreamingResponse(c *gin.Conte
 	reader := bufio.NewReader(resp.Body)
 	usage := &ClaudeUsage{}
 	var firstTokenMs *int
+	lineCount := 0
 
 	for {
 		line, err := reader.ReadString('\n')
+		lineCount++
 		if len(line) > 0 {
+			// Debug: log raw line (truncated)
+			debugLine := line
+			if len(debugLine) > 200 {
+				debugLine = debugLine[:200] + "...(truncated)"
+			}
+			log.Printf("[GeminiSSE] line#%d len=%d isOAuth=%v raw=%q", lineCount, len(line), isOAuth, debugLine)
+
 			trimmed := strings.TrimRight(line, "\r\n")
 			if strings.HasPrefix(trimmed, "data:") {
 				payload := strings.TrimSpace(strings.TrimPrefix(trimmed, "data:"))
@@ -2333,8 +2384,14 @@ func (s *GeminiMessagesCompatService) handleNativeStreamingResponse(c *gin.Conte
 					flusher.Flush()
 				}
 			} else {
-				_, _ = io.WriteString(c.Writer, line)
-				flusher.Flush()
+				// For OAuth/Code Assist mode, we already write \n\n after each data line,
+				// so skip passing through blank lines to avoid triple newlines.
+				if isOAuth && strings.TrimSpace(trimmed) == "" {
+					// Skip blank line for OAuth mode
+				} else {
+					_, _ = io.WriteString(c.Writer, line)
+					flusher.Flush()
+				}
 			}
 		}
 

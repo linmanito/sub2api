@@ -7,11 +7,13 @@ import (
 	_ "embed"
 	"errors"
 	"flag"
+	"io"
 	"log"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -24,6 +26,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/web"
 
 	"github.com/gin-gonic/gin"
+	rotatelogs "github.com/lestrrat-go/file-rotatelogs"
 )
 
 //go:embed VERSION
@@ -46,6 +49,7 @@ func init() {
 }
 
 // initLogger configures the default slog handler based on gin.Mode().
+// Logs are written to daily rotated files in the logs directory.
 // In non-release mode, Debug level logs are enabled.
 func initLogger() {
 	var level slog.Level
@@ -54,10 +58,45 @@ func initLogger() {
 	} else {
 		level = slog.LevelDebug
 	}
-	handler := slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
-		Level: level,
-	})
+
+	// 确保日志目录存在
+	logDir := "logs"
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		log.Printf("Failed to create log directory: %v, falling back to stderr", err)
+		// 回退到 stderr
+		handler := NewCustomHandler(os.Stderr, level)
+		slog.SetDefault(slog.New(handler))
+		return
+	}
+
+	// 配置 file-rotatelogs 进行按天轮换
+	// 工作原理（软链接方式）:
+	// 1. 真实日志文件: sub2api-2026-01-24.log（按日期命名）
+	// 2. 软链接: sub2api.log -> sub2api-2026-01-24.log（始终指向当天日志）
+	// 3. 每天 00:00，自动创建新日期的日志文件，并更新软链接
+	// 4. 始终可以用 tail -f sub2api.log 查看最新日志
+	logPath := filepath.Join(logDir, "sub2api.log")
+	logFile, err := rotatelogs.New(
+		filepath.Join(logDir, "sub2api-%Y-%m-%d.log"), // 真实文件名格式（带日期）
+		rotatelogs.WithLinkName(logPath),               // 软链接文件名（固定不变）
+		rotatelogs.WithRotationTime(24*time.Hour),      // 每24小时轮换一次
+		rotatelogs.WithMaxAge(90*24*time.Hour),         // 保留90天
+	)
+	if err != nil {
+		log.Printf("Failed to create rotating log file: %v, falling back to stderr", err)
+		handler := NewCustomHandler(os.Stderr, level)
+		slog.SetDefault(slog.New(handler))
+		return
+	}
+
+	// 同时输出到文件和控制台(便于 systemd 也能看到日志)
+	multiWriter := io.MultiWriter(logFile, os.Stderr)
+
+	// 使用自定义 Handler 以支持自定义时间格式
+	handler := NewCustomHandler(multiWriter, level)
 	slog.SetDefault(slog.New(handler))
+
+	log.Printf("Logger initialized with daily rotation in %s directory", logDir)
 }
 
 func main() {

@@ -64,6 +64,15 @@ func RegisterAdminRoutes(
 
 		// 用户属性管理
 		registerUserAttributeRoutes(admin, h)
+
+		// 套餐管理
+		registerPlanRoutes(admin, h)
+
+		// 订单管理
+		registerOrderRoutes(admin, h)
+
+		// 文件上传
+		registerUploadRoutes(admin, h)
 	}
 }
 
@@ -369,5 +378,35 @@ func registerUserAttributeRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 		attrs.PUT("/reorder", h.Admin.UserAttribute.ReorderDefinitions)
 		attrs.PUT("/:id", h.Admin.UserAttribute.UpdateDefinition)
 		attrs.DELETE("/:id", h.Admin.UserAttribute.DeleteDefinition)
+	}
+}
+
+func registerPlanRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+	plans := admin.Group("/plans")
+	{
+		plans.GET("", h.Admin.Plan.List)
+		plans.GET("/:id", h.Admin.Plan.GetByID)
+		plans.POST("", h.Admin.Plan.Create)
+		plans.PUT("/:id", h.Admin.Plan.Update)
+		plans.DELETE("/:id", h.Admin.Plan.Delete)
+		plans.PUT("/:id/status", h.Admin.Plan.UpdateStatus)
+		plans.PUT("/sort", h.Admin.Plan.UpdateSortOrders)
+	}
+}
+
+func registerOrderRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+	orders := admin.Group("/orders")
+	{
+		orders.GET("", h.Admin.Order.List)
+		orders.GET("/:id", h.Admin.Order.GetByID)
+		orders.POST("/:id/confirm", h.Admin.Order.Confirm)
+		orders.POST("/:id/reject", h.Admin.Order.Reject)
+	}
+}
+
+func registerUploadRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+	upload := admin.Group("/upload")
+	{
+		upload.POST("/image", h.Admin.Upload.UploadImage)
 	}
 }

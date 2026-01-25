@@ -54,7 +54,7 @@ func (s *UserSubscription) NeedsDailyReset() bool {
 	if s.DailyWindowStart == nil {
 		return false
 	}
-	return time.Since(*s.DailyWindowStart) >= 24*time.Hour
+	return time.Since(*s.DailyWindowStart) >= 5*time.Hour
 }
 
 func (s *UserSubscription) NeedsWeeklyReset() bool {
@@ -75,7 +75,7 @@ func (s *UserSubscription) DailyResetTime() *time.Time {
 	if s.DailyWindowStart == nil {
 		return nil
 	}
-	t := s.DailyWindowStart.Add(24 * time.Hour)
+	t := s.DailyWindowStart.Add(5 * time.Hour)
 	return &t
 }
 

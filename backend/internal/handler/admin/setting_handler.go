@@ -148,6 +148,12 @@ type UpdateSettingsRequest struct {
 	OpsRealtimeMonitoringEnabled *bool   `json:"ops_realtime_monitoring_enabled"`
 	OpsQueryModeDefault          *string `json:"ops_query_mode_default"`
 	OpsMetricsIntervalSeconds    *int    `json:"ops_metrics_interval_seconds"`
+
+	// Payment settings (套餐支付配置)
+	PaymentAlipayQrcode  string `json:"payment_alipay_qrcode"`
+	PaymentWechatQrcode  string `json:"payment_wechat_qrcode"`
+	PaymentServiceQrcode string `json:"payment_service_qrcode"`
+	PaymentNote          string `json:"payment_note"`
 }
 
 // UpdateSettings 更新系统设置
@@ -315,6 +321,11 @@ func (h *SettingHandler) UpdateSettings(c *gin.Context) {
 			}
 			return previousSettings.OpsMetricsIntervalSeconds
 		}(),
+		// Payment settings
+		PaymentAlipayQrcode:  req.PaymentAlipayQrcode,
+		PaymentWechatQrcode:  req.PaymentWechatQrcode,
+		PaymentServiceQrcode: req.PaymentServiceQrcode,
+		PaymentNote:          req.PaymentNote,
 	}
 
 	if err := h.settingService.UpdateSettings(c.Request.Context(), settings); err != nil {

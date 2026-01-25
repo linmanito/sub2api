@@ -37,6 +37,33 @@ server:
 run_mode: "standard"
 
 # =============================================================================
+# Logging Configuration
+# 日志配置
+# =============================================================================
+logging:
+  # Log level: debug, info, warn, error
+  # 日志级别: debug, info, warn, error
+  level: "info"
+  # Log format: text, json
+  # 日志格式: text（文本）, json（JSON 格式，便于机器解析）
+  format: "text"
+  # Request tracing configuration
+  # 请求追踪配置
+  request_tracing:
+    # Enable request tracing
+    # 启用请求追踪
+    enabled: true
+    # Record detailed stage timestamps (for debugging)
+    # 记录详细阶段时间戳（用于调试）
+    detailed: false
+    # Record verbose request logs (start/end/stages)
+    # 记录详细的请求日志（开始/结束/阶段），便于追踪单个请求的完整生命周期
+    verbose_logging: false
+    # Sample rate (0.0-1.0): 1.0 traces all requests, 0.1 traces 10%
+    # 采样率（0.0-1.0）：1.0 追踪所有请求，0.1 追踪 10% 的请求
+    sample_rate: 1.0
+
+# =============================================================================
 # CORS Configuration
 # 跨域资源共享 (CORS) 配置
 # =============================================================================
@@ -288,7 +315,7 @@ concurrency:
 database:
   # Database host address
   # 数据库主机地址
-  host: "localhost"
+  host: "127.0.0.1"
   # Database port
   # 数据库端口
   port: 5432
