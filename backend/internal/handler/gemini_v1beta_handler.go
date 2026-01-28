@@ -17,6 +17,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/pkg/gemini"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/googleapi"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ip"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/tracing"
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
@@ -377,11 +378,13 @@ func (h *GatewayHandler) GeminiV1BetaModels(c *gin.Context) {
 				}
 				lastFailoverStatus = failoverErr.StatusCode
 				switchCount++
-				log.Printf("Gemini account %d: upstream error %d, switching account %d/%d", account.ID, failoverErr.StatusCode, switchCount, maxAccountSwitches)
+				reqID := tracing.GetRequestID(c)
+				log.Printf("[%s] Gemini account %d: upstream error %d, switching account %d/%d", reqID, account.ID, failoverErr.StatusCode, switchCount, maxAccountSwitches)
 				continue
 			}
 			// ForwardNative already wrote the response
-			log.Printf("Gemini native forward failed: %v", err)
+			reqID := tracing.GetRequestID(c)
+			log.Printf("[%s] Gemini native forward failed: %v", reqID, err)
 			return
 		}
 

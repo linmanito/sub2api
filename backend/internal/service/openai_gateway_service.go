@@ -21,6 +21,7 @@ import (
 
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/tracing"
 	"github.com/Wei-Shaw/sub2api/internal/util/responseheaders"
 	"github.com/Wei-Shaw/sub2api/internal/util/urlvalidator"
 	"github.com/gin-gonic/gin"
@@ -767,7 +768,8 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	// 对所有请求执行模型映射（包含 Codex CLI）。
 	mappedModel := account.GetMappedModel(reqModel)
 	if mappedModel != reqModel {
-		log.Printf("[OpenAI] Model mapping applied: %s -> %s (account: %s, isCodexCLI: %v)", reqModel, mappedModel, account.Name, isCodexCLI)
+		reqID := tracing.GetRequestID(c)
+		log.Printf("[%s] [OpenAI] Model mapping applied: %s -> %s (account: %s, isCodexCLI: %v)", reqID, reqModel, mappedModel, account.Name, isCodexCLI)
 		reqBody["model"] = mappedModel
 		bodyModified = true
 	}
@@ -776,8 +778,9 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 	if model, ok := reqBody["model"].(string); ok {
 		normalizedModel := normalizeCodexModel(model)
 		if normalizedModel != "" && normalizedModel != model {
-			log.Printf("[OpenAI] Codex model normalization: %s -> %s (account: %s, type: %s, isCodexCLI: %v)",
-				model, normalizedModel, account.Name, account.Type, isCodexCLI)
+			reqID := tracing.GetRequestID(c)
+			log.Printf("[%s] [OpenAI] Codex model normalization: %s -> %s (account: %s, type: %s, isCodexCLI: %v)",
+				reqID, model, normalizedModel, account.Name, account.Type, isCodexCLI)
 			reqBody["model"] = normalizedModel
 			mappedModel = normalizedModel
 			bodyModified = true
@@ -789,7 +792,8 @@ func (s *OpenAIGatewayService) Forward(ctx context.Context, c *gin.Context, acco
 		if effort, ok := reasoning["effort"].(string); ok && effort == "minimal" {
 			reasoning["effort"] = "none"
 			bodyModified = true
-			log.Printf("[OpenAI] Normalized reasoning.effort: minimal -> none (account: %s)", account.Name)
+			reqID := tracing.GetRequestID(c)
+			log.Printf("[%s] [OpenAI] Normalized reasoning.effort: minimal -> none (account: %s)", reqID, account.Name)
 		}
 	}
 
@@ -1734,9 +1738,10 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 
 	// Deduct based on billing type
 	if isSubscriptionBilling {
-		if shouldBill && cost.TotalCost > 0 {
-			_ = s.userSubRepo.IncrementUsage(ctx, subscription.ID, cost.TotalCost)
-			s.billingCacheService.QueueUpdateSubscriptionUsage(user.ID, *apiKey.GroupID, cost.TotalCost)
+		// 订阅模式：使用 ActualCost 应用倍率后的费用
+		if shouldBill && cost.ActualCost > 0 {
+			_ = s.userSubRepo.IncrementUsage(ctx, subscription.ID, cost.ActualCost)
+			s.billingCacheService.QueueUpdateSubscriptionUsage(user.ID, *apiKey.GroupID, cost.ActualCost)
 		}
 	} else {
 		if shouldBill && cost.ActualCost > 0 {

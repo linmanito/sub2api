@@ -334,11 +334,13 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 						return
 					}
 					switchCount++
-					log.Printf("Account %d: upstream error %d, switching account %d/%d", account.ID, failoverErr.StatusCode, switchCount, maxAccountSwitches)
+					reqID := tracing.GetRequestID(c)
+					log.Printf("[%s] Account %d: upstream error %d, switching account %d/%d", reqID, account.ID, failoverErr.StatusCode, switchCount, maxAccountSwitches)
 					continue
 				}
 				// 错误响应已在Forward中处理，这里只记录日志
-				log.Printf("Forward request failed: %v", err)
+				reqID := tracing.GetRequestID(c)
+				log.Printf("[%s] Forward request failed: %v", reqID, err)
 				return
 			}
 
@@ -482,11 +484,13 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 					return
 				}
 				switchCount++
-				log.Printf("Account %d: upstream error %d, switching account %d/%d", account.ID, failoverErr.StatusCode, switchCount, maxAccountSwitches)
+				reqID := tracing.GetRequestID(c)
+				log.Printf("[%s] Account %d: upstream error %d, switching account %d/%d", reqID, account.ID, failoverErr.StatusCode, switchCount, maxAccountSwitches)
 				continue
 			}
 			// 错误响应已在Forward中处理，这里只记录日志
-			log.Printf("Account %d: Forward request failed: %v", account.ID, err)
+			reqID := tracing.GetRequestID(c)
+			log.Printf("[%s] Account %d: Forward request failed: %v", reqID, account.ID, err)
 			return
 		}
 

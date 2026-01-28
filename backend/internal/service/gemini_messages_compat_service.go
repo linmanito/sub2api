@@ -21,6 +21,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/geminicli"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/tracing"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/googleapi"
 	"github.com/Wei-Shaw/sub2api/internal/util/responseheaders"
 	"github.com/Wei-Shaw/sub2api/internal/util/urlvalidator"
@@ -694,7 +695,8 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 				Message:            safeErr,
 			})
 			if attempt < geminiMaxRetries {
-				log.Printf("Gemini account %d: upstream request failed, retry %d/%d: %v", account.ID, attempt, geminiMaxRetries, err)
+				reqID := tracing.GetRequestID(c)
+				log.Printf("[%s] Gemini account %d: upstream request failed, retry %d/%d: %v", reqID, account.ID, attempt, geminiMaxRetries, err)
 				sleepGeminiBackoff(attempt)
 				continue
 			}
@@ -750,7 +752,8 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 				}
 				retryGeminiReq, txErr := convertClaudeMessagesToGeminiGenerateContent(strippedClaudeBody)
 				if txErr == nil {
-					log.Printf("Gemini account %d: detected signature-related 400, retrying with downgraded Claude blocks (%s)", account.ID, stageName)
+					reqID := tracing.GetRequestID(c)
+					log.Printf("[%s] Gemini account %d: detected signature-related 400, retrying with downgraded Claude blocks (%s)", reqID, account.ID, stageName)
 					geminiReq = retryGeminiReq
 					// Consume one retry budget attempt and continue with the updated request payload.
 					sleepGeminiBackoff(1)
@@ -809,7 +812,12 @@ func (s *GeminiMessagesCompatService) Forward(ctx context.Context, c *gin.Contex
 					Detail:             upstreamDetail,
 				})
 
-				log.Printf("Gemini account %d: upstream status %d, retry %d/%d", account.ID, resp.StatusCode, attempt, geminiMaxRetries)
+				reqID := tracing.GetRequestID(c)
+				if upstreamDetail != "" {
+					log.Printf("[%s] Gemini account %d: upstream status %d, retry %d/%d, msg=%s, body=%s", reqID, account.ID, resp.StatusCode, attempt, geminiMaxRetries, upstreamMsg, upstreamDetail)
+				} else {
+					log.Printf("[%s] Gemini account %d: upstream status %d, retry %d/%d, msg=%s", reqID, account.ID, resp.StatusCode, attempt, geminiMaxRetries, upstreamMsg)
+				}
 				sleepGeminiBackoff(attempt)
 				continue
 			}
@@ -1120,7 +1128,24 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 			c.Set(OpsUpstreamRequestBodyKey, string(body))
 		}
 
+		// 记录上游请求发送时间
+		upstreamSendTime := time.Now()
+		reqID := tracing.GetRequestID(c)
+		log.Printf("[%s] [GeminiUpstream] sending request to %s (account=%s, stream=%v, body_len=%d)",
+			reqID, upstreamReq.URL.Host, account.Name, useUpstreamStream, len(body))
+
 		resp, err = s.httpUpstream.Do(upstreamReq, proxyURL, account.ID, account.Concurrency)
+
+		// 记录 TTFB（首字节时间）
+		ttfbMs := time.Since(upstreamSendTime).Milliseconds()
+		if err == nil {
+			log.Printf("[%s] [GeminiUpstream] received response (status=%d, ttfb_ms=%d)",
+				reqID, resp.StatusCode, ttfbMs)
+		} else {
+			log.Printf("[%s] [GeminiUpstream] request failed (ttfb_ms=%d, error=%v)",
+				reqID, ttfbMs, err)
+		}
+
 		if err != nil {
 			safeErr := sanitizeUpstreamErrorMessage(err.Error())
 			appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
@@ -1132,7 +1157,7 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 				Message:            safeErr,
 			})
 			if attempt < geminiMaxRetries {
-				log.Printf("Gemini account %d: upstream request failed, retry %d/%d: %v", account.ID, attempt, geminiMaxRetries, err)
+				log.Printf("[%s] Gemini account %d: upstream request failed, retry %d/%d: %v", reqID, account.ID, attempt, geminiMaxRetries, err)
 				sleepGeminiBackoff(attempt)
 				continue
 			}
@@ -1193,7 +1218,12 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 					Detail:             upstreamDetail,
 				})
 
-				log.Printf("Gemini account %d: upstream status %d, retry %d/%d", account.ID, resp.StatusCode, attempt, geminiMaxRetries)
+				reqID := tracing.GetRequestID(c)
+				if upstreamDetail != "" {
+					log.Printf("[%s] Gemini account %d: upstream status %d, retry %d/%d, msg=%s, body=%s", reqID, account.ID, resp.StatusCode, attempt, geminiMaxRetries, upstreamMsg, upstreamDetail)
+				} else {
+					log.Printf("[%s] Gemini account %d: upstream status %d, retry %d/%d, msg=%s", reqID, account.ID, resp.StatusCode, attempt, geminiMaxRetries, upstreamMsg)
+				}
 				sleepGeminiBackoff(attempt)
 				continue
 			}
@@ -1235,7 +1265,8 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 	// OAuth accounts without project_id use AI Studio API directly (same format as API key).
 	projectID := strings.TrimSpace(account.GetCredential("project_id"))
 	isCodeAssistOAuth := isOAuth && projectID != ""
-	log.Printf("[GeminiNative] account=%s isOAuth=%v project_id=%q isCodeAssistOAuth=%v stream=%v", account.Name, isOAuth, projectID, isCodeAssistOAuth, stream)
+	reqID := tracing.GetRequestID(c)
+	log.Printf("[%s] [GeminiNative] account=%s isOAuth=%v project_id=%q isCodeAssistOAuth=%v stream=%v", reqID, account.Name, isOAuth, projectID, isCodeAssistOAuth, stream)
 
 	if resp.StatusCode >= 400 {
 		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
@@ -1325,7 +1356,8 @@ func (s *GeminiMessagesCompatService) ForwardNative(ctx context.Context, c *gin.
 				maxBytes = 2048
 			}
 			upstreamDetail = truncateString(string(respBody), maxBytes)
-			log.Printf("[Gemini] native upstream error %d: %s", resp.StatusCode, truncateForLog(respBody, s.cfg.Gateway.LogUpstreamErrorBodyMaxBytes))
+			reqID := tracing.GetRequestID(c)
+			log.Printf("[%s] [Gemini] native upstream error %d: %s", reqID, resp.StatusCode, truncateForLog(respBody, s.cfg.Gateway.LogUpstreamErrorBodyMaxBytes))
 		}
 		setOpsUpstreamError(c, resp.StatusCode, upstreamMsg, upstreamDetail)
 		appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
@@ -1473,7 +1505,8 @@ func (s *GeminiMessagesCompatService) writeGeminiMappedError(c *gin.Context, acc
 	})
 
 	if s.cfg != nil && s.cfg.Gateway.LogUpstreamErrorBody {
-		log.Printf("[Gemini] upstream error %d: %s", upstreamStatus, truncateForLog(body, s.cfg.Gateway.LogUpstreamErrorBodyMaxBytes))
+		reqID := tracing.GetRequestID(c)
+		log.Printf("[%s] [Gemini] upstream error %d: %s", reqID, upstreamStatus, truncateForLog(body, s.cfg.Gateway.LogUpstreamErrorBodyMaxBytes))
 	}
 
 	var statusCode int
@@ -2245,13 +2278,14 @@ func parseSSEToJSON(body []byte) ([]byte, bool) {
 
 func (s *GeminiMessagesCompatService) handleNativeNonStreamingResponse(c *gin.Context, resp *http.Response, isOAuth bool) (*ClaudeUsage, error) {
 	// Log response headers for debugging
-	log.Printf("[GeminiAPI] ========== Response Headers ==========")
+	reqID := tracing.GetRequestID(c)
+	log.Printf("[%s] [GeminiAPI] ========== Response Headers ==========", reqID)
 	for key, values := range resp.Header {
 		if strings.HasPrefix(strings.ToLower(key), "x-ratelimit") {
-			log.Printf("[GeminiAPI] %s: %v", key, values)
+			log.Printf("[%s] [GeminiAPI] %s: %v", reqID, key, values)
 		}
 	}
-	log.Printf("[GeminiAPI] ========================================")
+	log.Printf("[%s] [GeminiAPI] ========================================", reqID)
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -2260,9 +2294,9 @@ func (s *GeminiMessagesCompatService) handleNativeNonStreamingResponse(c *gin.Co
 
 	// 检测并处理 SSE 格式响应（某些第三方中转服务可能返回 SSE 格式）
 	if strings.HasPrefix(string(respBody), "data:") {
-		log.Printf("[GeminiAPI] Detected SSE format in non-streaming response, attempting to parse...")
+		log.Printf("[%s] [GeminiAPI] Detected SSE format in non-streaming response, attempting to parse...", reqID)
 		if jsonBody, ok := parseSSEToJSON(respBody); ok {
-			log.Printf("[GeminiAPI] Successfully converted SSE to JSON")
+			log.Printf("[%s] [GeminiAPI] Successfully converted SSE to JSON", reqID)
 			respBody = jsonBody
 		}
 	}
@@ -2295,13 +2329,14 @@ func (s *GeminiMessagesCompatService) handleNativeNonStreamingResponse(c *gin.Co
 
 func (s *GeminiMessagesCompatService) handleNativeStreamingResponse(c *gin.Context, resp *http.Response, startTime time.Time, isOAuth bool) (*geminiNativeStreamResult, error) {
 	// Log response headers for debugging
-	log.Printf("[GeminiAPI] ========== Streaming Response Headers ==========")
+	reqID := tracing.GetRequestID(c)
+	log.Printf("[%s] [GeminiAPI] ========== Streaming Response Headers ==========", reqID)
 	for key, values := range resp.Header {
 		if strings.HasPrefix(strings.ToLower(key), "x-ratelimit") {
-			log.Printf("[GeminiAPI] %s: %v", key, values)
+			log.Printf("[%s] [GeminiAPI] %s: %v", reqID, key, values)
 		}
 	}
-	log.Printf("[GeminiAPI] ====================================================")
+	log.Printf("[%s] [GeminiAPI] ====================================================", reqID)
 
 	if s.cfg != nil {
 		responseheaders.WriteFilteredHeaders(c.Writer.Header(), resp.Header, s.cfg.Security.ResponseHeaders)
@@ -2337,7 +2372,7 @@ func (s *GeminiMessagesCompatService) handleNativeStreamingResponse(c *gin.Conte
 			if len(debugLine) > 200 {
 				debugLine = debugLine[:200] + "...(truncated)"
 			}
-			log.Printf("[GeminiSSE] line#%d len=%d isOAuth=%v raw=%q", lineCount, len(line), isOAuth, debugLine)
+			log.Printf("[%s] [GeminiSSE] line#%d len=%d isOAuth=%v raw=%q", reqID, lineCount, len(line), isOAuth, debugLine)
 
 			trimmed := strings.TrimRight(line, "\r\n")
 			if strings.HasPrefix(trimmed, "data:") {

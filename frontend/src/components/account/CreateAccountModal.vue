@@ -2395,9 +2395,12 @@ const handleSubmit = async () => {
   }
 
   // Add model mapping if configured
-  const modelMapping = buildModelMappingObject(modelRestrictionMode.value, allowedModels.value, modelMappings.value)
-  if (modelMapping) {
-    credentials.model_mapping = modelMapping
+  // Gemini API Key accounts: skip model_mapping to allow all upstream models
+  if (form.platform !== 'gemini') {
+    const modelMapping = buildModelMappingObject(modelRestrictionMode.value, allowedModels.value, modelMappings.value)
+    if (modelMapping) {
+      credentials.model_mapping = modelMapping
+    }
   }
 
   // Add custom error codes if enabled

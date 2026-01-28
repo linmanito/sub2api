@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/antigravity"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/tracing"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
@@ -106,18 +107,21 @@ urlFallbackLoop:
 					Message:            safeErr,
 				})
 				if shouldAntigravityFallbackToNextURL(err, 0) && urlIdx < len(availableURLs)-1 {
-					log.Printf("%s URL fallback (connection error): %s -> %s", p.prefix, baseURL, availableURLs[urlIdx+1])
+					reqID := tracing.GetRequestID(p.c)
+					log.Printf("[%s] %s URL fallback (connection error): %s -> %s", reqID, p.prefix, baseURL, availableURLs[urlIdx+1])
 					continue urlFallbackLoop
 				}
 				if attempt < antigravityMaxRetries {
-					log.Printf("%s status=request_failed retry=%d/%d error=%v", p.prefix, attempt, antigravityMaxRetries, err)
+					reqID := tracing.GetRequestID(p.c)
+					log.Printf("[%s] %s status=request_failed retry=%d/%d error=%v", reqID, p.prefix, attempt, antigravityMaxRetries, err)
 					if !sleepAntigravityBackoffWithContext(p.ctx, attempt) {
-						log.Printf("%s status=context_canceled_during_backoff", p.prefix)
+						log.Printf("[%s] %s status=context_canceled_during_backoff", reqID, p.prefix)
 						return nil, p.ctx.Err()
 					}
 					continue
 				}
-				log.Printf("%s status=request_failed retries_exhausted error=%v", p.prefix, err)
+				reqID := tracing.GetRequestID(p.c)
+				log.Printf("[%s] %s status=request_failed retries_exhausted error=%v", reqID, p.prefix, err)
 				setOpsUpstreamError(p.c, 0, safeErr, "")
 				return nil, fmt.Errorf("upstream request failed after retries: %w", err)
 			}
@@ -129,7 +133,8 @@ urlFallbackLoop:
 
 				// "Resource has been exhausted" 是 URL 级别限流，切换 URL
 				if isURLLevelRateLimit(respBody) && urlIdx < len(availableURLs)-1 {
-					log.Printf("%s URL fallback (429): %s -> %s", p.prefix, baseURL, availableURLs[urlIdx+1])
+					reqID := tracing.GetRequestID(p.c)
+					log.Printf("[%s] %s URL fallback (429): %s -> %s", reqID, p.prefix, baseURL, availableURLs[urlIdx+1])
 					continue urlFallbackLoop
 				}
 
@@ -147,9 +152,10 @@ urlFallbackLoop:
 						Message:            upstreamMsg,
 						Detail:             getUpstreamDetail(respBody),
 					})
-					log.Printf("%s status=429 retry=%d/%d body=%s", p.prefix, attempt, antigravityMaxRetries, truncateForLog(respBody, 200))
+					reqID := tracing.GetRequestID(p.c)
+					log.Printf("[%s] %s status=429 retry=%d/%d msg=%s body=%s", reqID, p.prefix, attempt, antigravityMaxRetries, upstreamMsg, truncateForLog(respBody, 500))
 					if !sleepAntigravityBackoffWithContext(p.ctx, attempt) {
-						log.Printf("%s status=context_canceled_during_backoff", p.prefix)
+						log.Printf("[%s] %s status=context_canceled_during_backoff", reqID, p.prefix)
 						return nil, p.ctx.Err()
 					}
 					continue
@@ -184,9 +190,10 @@ urlFallbackLoop:
 						Message:            upstreamMsg,
 						Detail:             getUpstreamDetail(respBody),
 					})
-					log.Printf("%s status=%d retry=%d/%d body=%s", p.prefix, resp.StatusCode, attempt, antigravityMaxRetries, truncateForLog(respBody, 500))
+					reqID := tracing.GetRequestID(p.c)
+					log.Printf("[%s] %s status=%d retry=%d/%d msg=%s body=%s", reqID, p.prefix, resp.StatusCode, attempt, antigravityMaxRetries, upstreamMsg, truncateForLog(respBody, 500))
 					if !sleepAntigravityBackoffWithContext(p.ctx, attempt) {
-						log.Printf("%s status=context_canceled_during_backoff", p.prefix)
+						log.Printf("[%s] %s status=context_canceled_during_backoff", reqID, p.prefix)
 						return nil, p.ctx.Err()
 					}
 					continue
@@ -816,7 +823,8 @@ func (s *AntigravityGatewayService) Forward(ctx context.Context, c *gin.Context,
 					continue
 				}
 
-				log.Printf("Antigravity account %d: detected signature-related 400, retrying once (%s)", account.ID, stage.name)
+				reqID := tracing.GetRequestID(c)
+				log.Printf("[%s] Antigravity account %d: detected signature-related 400, retrying once (%s)", reqID, account.ID, stage.name)
 
 				retryGeminiBody, txErr := antigravity.TransformClaudeToGeminiWithOptions(&retryClaudeReq, projectID, mappedModel, s.getClaudeTransformOptions(ctx))
 				if txErr != nil {
@@ -845,7 +853,8 @@ func (s *AntigravityGatewayService) Forward(ctx context.Context, c *gin.Context,
 						Kind:               "signature_retry_request_error",
 						Message:            sanitizeUpstreamErrorMessage(retryErr.Error()),
 					})
-					log.Printf("Antigravity account %d: signature retry request failed (%s): %v", account.ID, stage.name, retryErr)
+					reqID := tracing.GetRequestID(c)
+					log.Printf("[%s] Antigravity account %d: signature retry request failed (%s): %v", reqID, account.ID, stage.name, retryErr)
 					continue
 				}
 
@@ -864,7 +873,8 @@ func (s *AntigravityGatewayService) Forward(ctx context.Context, c *gin.Context,
 					if retryResp.Request != nil && retryResp.Request.URL != nil {
 						retryBaseURL = retryResp.Request.URL.Scheme + "://" + retryResp.Request.URL.Host
 					}
-					log.Printf("%s status=429 rate_limited base_url=%s retry_stage=%s body=%s", prefix, retryBaseURL, stage.name, truncateForLog(retryBody, 200))
+					reqID := tracing.GetRequestID(c)
+					log.Printf("[%s] %s status=429 rate_limited base_url=%s retry_stage=%s body=%s", reqID, prefix, retryBaseURL, stage.name, truncateForLog(retryBody, 200))
 				}
 				kind := "signature_retry"
 				if strings.TrimSpace(stage.name) != "" {
@@ -1360,7 +1370,8 @@ func (s *AntigravityGatewayService) ForwardGemini(ctx context.Context, c *gin.Co
 			isModelNotFoundError(resp.StatusCode, respBody) {
 			fallbackModel := s.settingService.GetFallbackModel(ctx, PlatformAntigravity)
 			if fallbackModel != "" && fallbackModel != mappedModel {
-				log.Printf("[Antigravity] Model not found (%s), retrying with fallback model %s (account: %s)", mappedModel, fallbackModel, account.Name)
+				reqID := tracing.GetRequestID(c)
+				log.Printf("[%s] [Antigravity] Model not found (%s), retrying with fallback model %s (account: %s)", reqID, mappedModel, fallbackModel, account.Name)
 
 				fallbackWrapped, err := s.wrapV1InternalRequest(projectID, fallbackModel, injectedBody)
 				if err == nil {
@@ -1438,7 +1449,8 @@ func (s *AntigravityGatewayService) ForwardGemini(ctx context.Context, c *gin.Co
 			Message:            upstreamMsg,
 			Detail:             upstreamDetail,
 		})
-		log.Printf("[antigravity-Forward] upstream error status=%d body=%s", resp.StatusCode, truncateForLog(unwrappedForOps, 500))
+		reqID := tracing.GetRequestID(c)
+		log.Printf("[%s] [antigravity-Forward] upstream error status=%d body=%s", reqID, resp.StatusCode, truncateForLog(unwrappedForOps, 500))
 		c.Data(resp.StatusCode, contentType, unwrappedForOps)
 		return nil, fmt.Errorf("antigravity upstream error: %d", resp.StatusCode)
 	}
@@ -1456,7 +1468,8 @@ handleSuccess:
 		// 客户端要求流式，直接透传
 		streamRes, err := s.handleGeminiStreamingResponse(c, resp, startTime)
 		if err != nil {
-			log.Printf("%s status=stream_error error=%v", prefix, err)
+			reqID := tracing.GetRequestID(c)
+			log.Printf("[%s] %s status=stream_error error=%v", reqID, prefix, err)
 			return nil, err
 		}
 		usage = streamRes.usage
@@ -1465,7 +1478,8 @@ handleSuccess:
 		// 客户端要求非流式，收集流式响应后返回
 		streamRes, err := s.handleGeminiStreamToNonStreaming(c, resp, startTime)
 		if err != nil {
-			log.Printf("%s status=stream_collect_error error=%v", prefix, err)
+			reqID := tracing.GetRequestID(c)
+			log.Printf("[%s] %s status=stream_collect_error error=%v", reqID, prefix, err)
 			return nil, err
 		}
 		usage = streamRes.usage
@@ -2139,7 +2153,8 @@ func (s *AntigravityGatewayService) writeMappedClaudeError(c *gin.Context, accou
 
 	// 记录上游错误详情便于排障（可选：由配置控制；不回显到客户端）
 	if logBody {
-		log.Printf("[antigravity-Forward] upstream_error status=%d body=%s", upstreamStatus, truncateForLog(body, maxBytes))
+		reqID := tracing.GetRequestID(c)
+		log.Printf("[%s] [antigravity-Forward] upstream_error status=%d body=%s", reqID, upstreamStatus, truncateForLog(body, maxBytes))
 	}
 
 	var statusCode int

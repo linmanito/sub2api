@@ -14,6 +14,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ip"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/openai"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/tracing"
 	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
 
@@ -290,11 +291,13 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 				}
 				lastFailoverStatus = failoverErr.StatusCode
 				switchCount++
-				log.Printf("Account %d: upstream error %d, switching account %d/%d", account.ID, failoverErr.StatusCode, switchCount, maxAccountSwitches)
+				reqID := tracing.GetRequestID(c)
+				log.Printf("[%s] Account %d: upstream error %d, switching account %d/%d", reqID, account.ID, failoverErr.StatusCode, switchCount, maxAccountSwitches)
 				continue
 			}
 			// Error response already handled in Forward, just log
-			log.Printf("Account %d: Forward request failed: %v", account.ID, err)
+			reqID := tracing.GetRequestID(c)
+			log.Printf("[%s] Account %d: Forward request failed: %v", reqID, account.ID, err)
 			return
 		}
 

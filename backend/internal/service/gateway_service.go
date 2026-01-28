@@ -24,6 +24,7 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/claude"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/tracing"
 	"github.com/Wei-Shaw/sub2api/internal/util/responseheaders"
 	"github.com/Wei-Shaw/sub2api/internal/util/urlvalidator"
 	"github.com/tidwall/gjson"
@@ -868,34 +869,58 @@ func (s *GatewayService) SelectAccountWithLoadAwareness(ctx context.Context, gro
 
 	// ============ Layer 2: 负载感知选择 ============
 	candidates := make([]*Account, 0, len(accounts))
+	var loadAwareFilteredCount int
 	for i := range accounts {
 		acc := &accounts[i]
 		if isExcluded(acc.ID) {
+			slog.Debug("load_aware_account_filtered", "account_id", acc.ID, "name", acc.Name, "reason", "excluded", "model", requestedModel)
+			loadAwareFilteredCount++
 			continue
 		}
 		// Scheduler snapshots can be temporarily stale (bucket rebuild is throttled);
 		// re-check schedulability here so recently rate-limited/overloaded accounts
 		// are not selected again before the bucket is rebuilt.
 		if !acc.IsSchedulable() {
+			slog.Debug("load_aware_account_filtered", "account_id", acc.ID, "name", acc.Name, "reason", "not_schedulable", "model", requestedModel,
+				"status", acc.Status, "schedulable", acc.Schedulable,
+				"rate_limit_reset_at", acc.RateLimitResetAt, "overload_until", acc.OverloadUntil,
+				"temp_unschedulable_until", acc.TempUnschedulableUntil)
+			loadAwareFilteredCount++
 			continue
 		}
 		if !s.isAccountAllowedForPlatform(acc, platform, useMixed) {
+			slog.Debug("load_aware_account_filtered", "account_id", acc.ID, "name", acc.Name, "reason", "platform_not_allowed", "model", requestedModel,
+				"account_platform", acc.Platform, "target_platform", platform, "use_mixed", useMixed)
+			loadAwareFilteredCount++
 			continue
 		}
 		if !acc.IsSchedulableForModel(requestedModel) {
+			slog.Debug("load_aware_account_filtered", "account_id", acc.ID, "name", acc.Name, "reason", "model_rate_limited", "model", requestedModel)
+			loadAwareFilteredCount++
 			continue
 		}
 		if requestedModel != "" && !s.isModelSupportedByAccount(acc, requestedModel) {
+			slog.Debug("load_aware_account_filtered", "account_id", acc.ID, "name", acc.Name, "reason", "model_not_supported", "model", requestedModel,
+				"has_model_mapping", acc.GetModelMapping() != nil, "account_platform", acc.Platform)
+			loadAwareFilteredCount++
 			continue
 		}
 		// 窗口费用检查（非粘性会话路径）
 		if !s.isAccountSchedulableForWindowCost(ctx, acc, false) {
+			slog.Debug("load_aware_account_filtered", "account_id", acc.ID, "name", acc.Name, "reason", "window_cost_exceeded", "model", requestedModel)
+			loadAwareFilteredCount++
 			continue
 		}
 		candidates = append(candidates, acc)
 	}
 
 	if len(candidates) == 0 {
+		slog.Warn("load_aware_no_candidates",
+			"group_id", derefGroupID(groupID),
+			"model", requestedModel,
+			"total_accounts", len(accounts),
+			"filtered_count", loadAwareFilteredCount,
+			"platform", platform)
 		return nil, errors.New("no available accounts")
 	}
 
@@ -1613,20 +1638,33 @@ func (s *GatewayService) selectAccountForModelWithPlatform(ctx context.Context, 
 
 	// 3. 按优先级+最久未用选择（考虑模型支持）
 	var selected *Account
+	var filteredCount int
 	for i := range accounts {
 		acc := &accounts[i]
 		if _, excluded := excludedIDs[acc.ID]; excluded {
+			slog.Debug("account_selection_filtered", "account_id", acc.ID, "name", acc.Name, "reason", "excluded", "model", requestedModel)
+			filteredCount++
 			continue
 		}
 		// Scheduler snapshots can be temporarily stale; re-check schedulability here to
 		// avoid selecting accounts that were recently rate-limited/overloaded.
 		if !acc.IsSchedulable() {
+			slog.Debug("account_selection_filtered", "account_id", acc.ID, "name", acc.Name, "reason", "not_schedulable", "model", requestedModel,
+				"status", acc.Status, "schedulable", acc.Schedulable,
+				"rate_limit_reset_at", acc.RateLimitResetAt, "overload_until", acc.OverloadUntil,
+				"temp_unschedulable_until", acc.TempUnschedulableUntil)
+			filteredCount++
 			continue
 		}
 		if !acc.IsSchedulableForModel(requestedModel) {
+			slog.Debug("account_selection_filtered", "account_id", acc.ID, "name", acc.Name, "reason", "model_rate_limited", "model", requestedModel)
+			filteredCount++
 			continue
 		}
 		if requestedModel != "" && !s.isModelSupportedByAccount(acc, requestedModel) {
+			slog.Debug("account_selection_filtered", "account_id", acc.ID, "name", acc.Name, "reason", "model_not_supported", "model", requestedModel,
+				"has_model_mapping", acc.GetModelMapping() != nil)
+			filteredCount++
 			continue
 		}
 		if selected == nil {
@@ -1654,6 +1692,12 @@ func (s *GatewayService) selectAccountForModelWithPlatform(ctx context.Context, 
 	}
 
 	if selected == nil {
+		slog.Warn("account_selection_no_available",
+			"group_id", derefGroupID(groupID),
+			"model", requestedModel,
+			"total_accounts", len(accounts),
+			"filtered_count", filteredCount,
+			"platform", platform)
 		if requestedModel != "" {
 			return nil, fmt.Errorf("no available accounts supporting model: %s", requestedModel)
 		}
@@ -1826,24 +1870,39 @@ func (s *GatewayService) selectAccountWithMixedScheduling(ctx context.Context, g
 
 	// 3. 按优先级+最久未用选择（考虑模型支持和混合调度）
 	var selected *Account
+	var filteredCount int
 	for i := range accounts {
 		acc := &accounts[i]
 		if _, excluded := excludedIDs[acc.ID]; excluded {
+			slog.Debug("account_selection_filtered", "account_id", acc.ID, "name", acc.Name, "reason", "excluded", "model", requestedModel)
+			filteredCount++
 			continue
 		}
 		// Scheduler snapshots can be temporarily stale; re-check schedulability here to
 		// avoid selecting accounts that were recently rate-limited/overloaded.
 		if !acc.IsSchedulable() {
+			slog.Debug("account_selection_filtered", "account_id", acc.ID, "name", acc.Name, "reason", "not_schedulable", "model", requestedModel,
+				"status", acc.Status, "schedulable", acc.Schedulable,
+				"rate_limit_reset_at", acc.RateLimitResetAt, "overload_until", acc.OverloadUntil,
+				"temp_unschedulable_until", acc.TempUnschedulableUntil)
+			filteredCount++
 			continue
 		}
 		// 过滤：原生平台直接通过，antigravity 需要启用混合调度
 		if acc.Platform == PlatformAntigravity && !acc.IsMixedSchedulingEnabled() {
+			slog.Debug("account_selection_filtered", "account_id", acc.ID, "name", acc.Name, "reason", "antigravity_not_mixed", "model", requestedModel)
+			filteredCount++
 			continue
 		}
 		if !acc.IsSchedulableForModel(requestedModel) {
+			slog.Debug("account_selection_filtered", "account_id", acc.ID, "name", acc.Name, "reason", "model_rate_limited", "model", requestedModel)
+			filteredCount++
 			continue
 		}
 		if requestedModel != "" && !s.isModelSupportedByAccount(acc, requestedModel) {
+			slog.Debug("account_selection_filtered", "account_id", acc.ID, "name", acc.Name, "reason", "model_not_supported", "model", requestedModel,
+				"has_model_mapping", acc.GetModelMapping() != nil)
+			filteredCount++
 			continue
 		}
 		if selected == nil {
@@ -1871,6 +1930,12 @@ func (s *GatewayService) selectAccountWithMixedScheduling(ctx context.Context, g
 	}
 
 	if selected == nil {
+		slog.Warn("account_selection_no_available",
+			"group_id", derefGroupID(groupID),
+			"model", requestedModel,
+			"total_accounts", len(accounts),
+			"filtered_count", filteredCount,
+			"platform", nativePlatform)
 		if requestedModel != "" {
 			return nil, fmt.Errorf("no available accounts supporting model: %s", requestedModel)
 		}
@@ -2314,8 +2379,9 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 	}
 
 	// 调试日志：记录即将转发的账号信息
-	log.Printf("[Forward] Using account: ID=%d Name=%s Platform=%s Type=%s TLSFingerprint=%v Proxy=%s",
-		account.ID, account.Name, account.Platform, account.Type, account.IsTLSFingerprintEnabled(), proxyURL)
+	reqID := tracing.GetRequestID(c)
+	log.Printf("[%s] [Forward] Using account: ID=%d Name=%s Platform=%s Type=%s TLSFingerprint=%v Proxy=%s",
+		reqID, account.ID, account.Name, account.Platform, account.Type, account.IsTLSFingerprintEnabled(), proxyURL)
 
 	// 重试循环
 	var resp *http.Response
@@ -2395,7 +2461,8 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 						resp.Body = io.NopCloser(bytes.NewReader(respBody))
 						break
 					}
-					log.Printf("Account %d: detected thinking block signature error, retrying with filtered thinking blocks", account.ID)
+					reqID := tracing.GetRequestID(c)
+					log.Printf("[%s] Account %d: detected thinking block signature error, retrying with filtered thinking blocks", reqID, account.ID)
 
 					// Conservative two-stage fallback:
 					// 1) Disable thinking + thinking->text (preserve content)
@@ -2408,7 +2475,8 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 						retryResp, retryErr := s.httpUpstream.DoWithTLS(retryReq, proxyURL, account.ID, account.Concurrency, account.IsTLSFingerprintEnabled())
 						if retryErr == nil {
 							if retryResp.StatusCode < 400 {
-								log.Printf("Account %d: signature error retry succeeded (thinking downgraded)", account.ID)
+								reqID := tracing.GetRequestID(c)
+								log.Printf("[%s] Account %d: signature error retry succeeded (thinking downgraded)", reqID, account.ID)
 								resp = retryResp
 								break
 							}
@@ -2433,7 +2501,8 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 								})
 								msg2 := extractUpstreamErrorMessage(retryRespBody)
 								if looksLikeToolSignatureError(msg2) && time.Since(retryStart) < maxRetryElapsed {
-									log.Printf("Account %d: signature retry still failing and looks tool-related, retrying with tool blocks downgraded", account.ID)
+									reqID := tracing.GetRequestID(c)
+									log.Printf("[%s] Account %d: signature retry still failing and looks tool-related, retrying with tool blocks downgraded", reqID, account.ID)
 									filteredBody2 := FilterSignatureSensitiveBlocksForRetry(body)
 									retryReq2, buildErr2 := s.buildUpstreamRequest(ctx, c, account, filteredBody2, token, tokenType, reqModel)
 									if buildErr2 == nil {
@@ -2453,9 +2522,11 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 											Kind:               "signature_retry_tools_request_error",
 											Message:            sanitizeUpstreamErrorMessage(retryErr2.Error()),
 										})
-										log.Printf("Account %d: tool-downgrade signature retry failed: %v", account.ID, retryErr2)
+										reqID := tracing.GetRequestID(c)
+										log.Printf("[%s] Account %d: tool-downgrade signature retry failed: %v", reqID, account.ID, retryErr2)
 									} else {
-										log.Printf("Account %d: tool-downgrade signature retry build failed: %v", account.ID, buildErr2)
+										reqID := tracing.GetRequestID(c)
+										log.Printf("[%s] Account %d: tool-downgrade signature retry build failed: %v", reqID, account.ID, buildErr2)
 									}
 								}
 							}
@@ -2519,8 +2590,19 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 						return ""
 					}(),
 				})
-				log.Printf("Account %d: upstream error %d, retry %d/%d after %v (elapsed=%v/%v)",
-					account.ID, resp.StatusCode, attempt, maxRetryAttempts, delay, elapsed, maxRetryElapsed)
+				upstreamMsg := extractUpstreamErrorMessage(respBody)
+				upstreamBody := ""
+				if s.cfg != nil && s.cfg.Gateway.LogUpstreamErrorBody {
+					upstreamBody = truncateString(string(respBody), s.cfg.Gateway.LogUpstreamErrorBodyMaxBytes)
+				}
+				reqID := tracing.GetRequestID(c)
+				if upstreamBody != "" {
+					log.Printf("[%s] Account %d: upstream error %d, retry %d/%d after %v (elapsed=%v/%v), msg=%s, body=%s",
+						reqID, account.ID, resp.StatusCode, attempt, maxRetryAttempts, delay, elapsed, maxRetryElapsed, upstreamMsg, upstreamBody)
+				} else {
+					log.Printf("[%s] Account %d: upstream error %d, retry %d/%d after %v (elapsed=%v/%v), msg=%s",
+						reqID, account.ID, resp.StatusCode, attempt, maxRetryAttempts, delay, elapsed, maxRetryElapsed, upstreamMsg)
+				}
 				if err := sleepWithContext(ctx, delay); err != nil {
 					return nil, err
 				}
@@ -2533,9 +2615,10 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 		// 不需要重试（成功或不可重试的错误），跳出循环
 		// DEBUG: 输出响应 headers（用于检测 rate limit 信息）
 		if account.Platform == PlatformGemini && resp.StatusCode < 400 {
-			log.Printf("[DEBUG] Gemini API Response Headers for account %d:", account.ID)
+			reqID := tracing.GetRequestID(c)
+			log.Printf("[%s] [DEBUG] Gemini API Response Headers for account %d:", reqID, account.ID)
 			for k, v := range resp.Header {
-				log.Printf("[DEBUG]   %s: %v", k, v)
+				log.Printf("[%s] [DEBUG]   %s: %v", reqID, k, v)
 			}
 		}
 		break
@@ -2553,8 +2636,9 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 			resp.Body = io.NopCloser(bytes.NewReader(respBody))
 
 			// 调试日志：打印重试耗尽后的错误响应
-			log.Printf("[Forward] Upstream error (retry exhausted, failover): Account=%d(%s) Status=%d RequestID=%s Body=%s",
-				account.ID, account.Name, resp.StatusCode, resp.Header.Get("x-request-id"), truncateString(string(respBody), 1000))
+			reqID := tracing.GetRequestID(c)
+			log.Printf("[%s] [Forward] Upstream error (retry exhausted, failover): Account=%d(%s) Status=%d RequestID=%s Body=%s",
+				reqID, account.ID, account.Name, resp.StatusCode, resp.Header.Get("x-request-id"), truncateString(string(respBody), 1000))
 
 			s.handleRetryExhaustedSideEffects(ctx, resp, account)
 			appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
@@ -2584,8 +2668,9 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 		resp.Body = io.NopCloser(bytes.NewReader(respBody))
 
 		// 调试日志：打印上游错误响应
-		log.Printf("[Forward] Upstream error (failover): Account=%d(%s) Status=%d RequestID=%s Body=%s",
-			account.ID, account.Name, resp.StatusCode, resp.Header.Get("x-request-id"), truncateString(string(respBody), 1000))
+		reqID := tracing.GetRequestID(c)
+		log.Printf("[%s] [Forward] Upstream error (failover): Account=%d(%s) Status=%d RequestID=%s Body=%s",
+			reqID, account.ID, account.Name, resp.StatusCode, resp.Header.Get("x-request-id"), truncateString(string(respBody), 1000))
 
 		s.handleFailoverSideEffects(ctx, resp, account)
 		appendOpsUpstreamError(c, OpsUpstreamErrorEvent{
@@ -2640,13 +2725,15 @@ func (s *GatewayService) Forward(ctx context.Context, c *gin.Context, account *A
 				})
 
 				if s.cfg.Gateway.LogUpstreamErrorBody {
+					reqID := tracing.GetRequestID(c)
 					log.Printf(
-						"Account %d: 400 error, attempting failover: %s",
-						account.ID,
+						"[%s] Account %d: 400 error, attempting failover: %s",
+						reqID, account.ID,
 						truncateForLog(respBody, s.cfg.Gateway.LogUpstreamErrorBodyMaxBytes),
 					)
 				} else {
-					log.Printf("Account %d: 400 error, attempting failover", account.ID)
+					reqID := tracing.GetRequestID(c)
+					log.Printf("[%s] Account %d: 400 error, attempting failover", reqID, account.ID)
 				}
 				s.handleFailoverSideEffects(ctx, resp, account)
 				return nil, &UpstreamFailoverError{StatusCode: resp.StatusCode}
@@ -2939,8 +3026,9 @@ func (s *GatewayService) handleErrorResponse(ctx context.Context, resp *http.Res
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 2<<20))
 
 	// 调试日志：打印上游错误响应
-	log.Printf("[Forward] Upstream error (non-retryable): Account=%d(%s) Status=%d RequestID=%s Body=%s",
-		account.ID, account.Name, resp.StatusCode, resp.Header.Get("x-request-id"), truncateString(string(body), 1000))
+	reqID := tracing.GetRequestID(c)
+	log.Printf("[%s] [Forward] Upstream error (non-retryable): Account=%d(%s) Status=%d RequestID=%s Body=%s",
+		reqID, account.ID, account.Name, resp.StatusCode, resp.Header.Get("x-request-id"), truncateString(string(body), 1000))
 
 	upstreamMsg := strings.TrimSpace(extractUpstreamErrorMessage(body))
 	upstreamMsg = sanitizeUpstreamErrorMessage(upstreamMsg)
@@ -3231,17 +3319,20 @@ func (s *GatewayService) handleStreamingResponse(ctx context.Context, resp *http
 			if ev.err != nil {
 				// 检测 context 取消（客户端断开会导致 context 取消，进而影响上游读取）
 				if errors.Is(ev.err, context.Canceled) || errors.Is(ev.err, context.DeadlineExceeded) {
-					log.Printf("Context canceled during streaming, returning collected usage")
+					reqID := tracing.GetRequestID(c)
+					log.Printf("[%s] Context canceled during streaming, returning collected usage", reqID)
 					return &streamingResult{usage: usage, firstTokenMs: firstTokenMs, clientDisconnect: true}, nil
 				}
 				// 客户端已通过写入失败检测到断开，上游也出错了，返回已收集的 usage
 				if clientDisconnected {
-					log.Printf("Upstream read error after client disconnect: %v, returning collected usage", ev.err)
+					reqID := tracing.GetRequestID(c)
+					log.Printf("[%s] Upstream read error after client disconnect: %v, returning collected usage", reqID, ev.err)
 					return &streamingResult{usage: usage, firstTokenMs: firstTokenMs, clientDisconnect: true}, nil
 				}
 				// 客户端未断开，正常的错误处理
 				if errors.Is(ev.err, bufio.ErrTooLong) {
-					log.Printf("SSE line too long: account=%d max_size=%d error=%v", account.ID, maxLineSize, ev.err)
+					reqID := tracing.GetRequestID(c)
+					log.Printf("[%s] SSE line too long: account=%d max_size=%d error=%v", reqID, account.ID, maxLineSize, ev.err)
 					sendErrorEvent("response_too_large")
 					return &streamingResult{usage: usage, firstTokenMs: firstTokenMs}, ev.err
 				}
@@ -3568,13 +3659,13 @@ func (s *GatewayService) RecordUsage(ctx context.Context, input *RecordUsageInpu
 
 	// 根据计费类型执行扣费
 	if isSubscriptionBilling {
-		// 订阅模式：更新订阅用量（使用 TotalCost 原始费用，不考虑倍率）
-		if shouldBill && cost.TotalCost > 0 {
-			if err := s.userSubRepo.IncrementUsage(ctx, subscription.ID, cost.TotalCost); err != nil {
+		// 订阅模式：更新订阅用量（使用 ActualCost 应用倍率后的费用）
+		if shouldBill && cost.ActualCost > 0 {
+			if err := s.userSubRepo.IncrementUsage(ctx, subscription.ID, cost.ActualCost); err != nil {
 				log.Printf("Increment subscription usage failed: %v", err)
 			}
 			// 异步更新订阅缓存
-			s.billingCacheService.QueueUpdateSubscriptionUsage(user.ID, *apiKey.GroupID, cost.TotalCost)
+			s.billingCacheService.QueueUpdateSubscriptionUsage(user.ID, *apiKey.GroupID, cost.ActualCost)
 		}
 	} else {
 		// 余额模式：扣除用户余额（使用 ActualCost 考虑倍率后的费用）
@@ -3660,7 +3751,8 @@ func (s *GatewayService) ForwardCountTokens(ctx context.Context, c *gin.Context,
 
 	// 检测 thinking block 签名错误（400）并重试一次（过滤 thinking blocks）
 	if resp.StatusCode == 400 && s.isThinkingBlockSignatureError(respBody) {
-		log.Printf("Account %d: detected thinking block signature error on count_tokens, retrying with filtered thinking blocks", account.ID)
+		reqID := tracing.GetRequestID(c)
+		log.Printf("[%s] Account %d: detected thinking block signature error on count_tokens, retrying with filtered thinking blocks", reqID, account.ID)
 
 		filteredBody := FilterThinkingBlocksForRetry(body)
 		retryReq, buildErr := s.buildCountTokensRequest(ctx, c, account, filteredBody, token, tokenType, reqModel)
